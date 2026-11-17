@@ -187,12 +187,15 @@ func (a *App) tgSend(text string) error {
 }
 
 // notify sends a Telegram notification if enabled.
+// It never blocks and is safe to call while the store is locked.
 func (a *App) notify(text string) {
-	var on bool
-	a.Store.Read(func(d *Data) { on = d.Settings.TgNotify && d.Settings.TgBotToken != "" && d.Settings.TgAdminID != "" })
-	if on {
-		go func() { _ = a.tgSend(text) }()
-	}
+	go func() {
+		var on bool
+		a.Store.Read(func(d *Data) { on = d.Settings.TgNotify && d.Settings.TgBotToken != "" && d.Settings.TgAdminID != "" })
+		if on {
+			_ = a.tgSend(text)
+		}
+	}()
 }
 
 // check2FARecovery disables 2FA if the recovery file exists.

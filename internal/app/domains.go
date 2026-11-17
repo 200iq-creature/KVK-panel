@@ -431,11 +431,16 @@ func (a *App) renewCerts() {
 			if dm.Mode != "letsencrypt" || !dm.AutoRenew {
 				continue
 			}
-			if dm.LastTry > 0 && now.Sub(time.UnixMilli(dm.LastTry)) < 6*time.Hour && dm.Status != "active" {
+			// decoy-site domains are retried often: without a real certificate the site looks suspicious
+			retry := 6 * time.Hour
+			if d.Settings.Fake.Enabled && containsStr(d.Settings.Fake.Domains, dm.Name) {
+				retry = 30 * time.Minute
+			}
+			if dm.LastTry > 0 && now.Sub(time.UnixMilli(dm.LastTry)) < retry && dm.Status != "active" {
 				continue
 			}
 			if dm.ExpiresAt == 0 {
-				if dm.Status == "error" && now.Sub(time.UnixMilli(dm.LastTry)) > 6*time.Hour {
+				if dm.Status == "error" && now.Sub(time.UnixMilli(dm.LastTry)) > retry {
 					jobs = append(jobs, job{dm.ID})
 				}
 				continue

@@ -83,6 +83,15 @@ func (a *App) apiMux() *http.ServeMux {
 	A("GET /api/inbounds/{id}/link", a.apiInboundExampleLink)
 	A("GET /api/tools/x25519", a.apiX25519)
 	A("GET /api/tools/port", a.apiPortCheck)
+	A("GET /api/autosetup", a.apiAutoGet)
+	A("POST /api/autosetup/check", a.apiAutoCheck)
+	A("POST /api/autosetup/run", a.apiAutoRun)
+	A("GET /api/autosetup/state", a.apiAutoState)
+	A("POST /api/autosetup/selfcheck", a.apiAutoCheckNow)
+	A("PUT /api/autosetup/site", a.apiAutoSite)
+	A("GET /api/autosetup/preview", a.apiAutoPreview)
+	A("DELETE /api/autosetup/token", a.apiAutoToken)
+	A("DELETE /api/autosetup", a.apiAutoDelete)
 
 	// xray core
 	A("GET /api/xray/status", a.apiXrayStatus)

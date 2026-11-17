@@ -138,7 +138,7 @@ func (a *App) localNodeInfo(d *Data) nodeInfo {
 	ni := nodeInfo{Name: d.Settings.NodeName, Country: d.Settings.CountryCode, Version: Version, Clients: len(d.Clients), Inbounds: []NodeInbound{}}
 	for _, in := range d.Inbounds {
 		if in.Enabled {
-			ni.Inbounds = append(ni.Inbounds, a.publicInbound(d, in))
+			ni.Inbounds = append(ni.Inbounds, a.publicInbounds(d, in)...)
 		}
 	}
 	return ni

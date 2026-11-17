@@ -89,6 +89,9 @@ func (a *App) Run() error {
 	} else {
 		log.Printf("xray binary not found in %s", a.BinDir)
 	}
+	if err := a.StartFakeSite(); err != nil {
+		log.Printf("fake site: %v", err)
+	}
 	a.check2FARecovery()
 	go a.sys.loop(a.ctx)
 	go a.jobs()
@@ -107,6 +110,7 @@ func (a *App) Run() error {
 		case <-a.ctx.Done():
 			srv.shutdown()
 			a.Xray.Stop()
+			a.StopFakeSite()
 			mtg.stop()
 			a.Store.Flush()
 			return nil

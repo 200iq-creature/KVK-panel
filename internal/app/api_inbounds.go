@@ -85,6 +85,14 @@ func portUsedByPanel(d *Data, port int, exceptID string) string {
 			return "порт занят инбаундом «" + in.Remark + "»"
 		}
 	}
+	if fs := d.Settings.Fake; fs.Enabled {
+		if fs.TLSPort > 0 && port == fs.TLSPort {
+			return "служебный порт фейк-сайта"
+		}
+		if port == 80 && fakeRunning80() {
+			return "порт 80 занят фейк-сайтом (редирект на HTTPS и проверка Let's Encrypt)"
+		}
+	}
 	tp := d.Settings.TgProxy
 	if exceptID != "tg-mtproto" && tp.MTEnabled && tp.MTPort == port {
 		return "порт занят MTProto-прокси"

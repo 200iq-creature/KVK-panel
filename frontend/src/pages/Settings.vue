@@ -63,6 +63,7 @@
                   <button v-else class="btn btn-g" type="button" :disabled="busy.x || !xst.installed" @click="xAct('start')"><Icon n="play" />Запустить</button>
                   <span class="grow"></span>
                   <button class="btn btn-g" type="button" @click="showConfig"><Icon n="file" />config.json</button>
+                  <button class="btn" type="button" @click="openXray"><Icon n="up" />Сменить версию</button>
                 </div>
               </div>
             </section>
@@ -158,10 +159,13 @@ import { ok, fail, confirm, copy } from '../lib/ui.js'
 import { uptime, date, dt, ago, bytes, flag } from '../lib/fmt.js'
 import { RESET } from '../lib/client.js'
 import { loadMeta } from '../lib/meta.js'
+import { useRoute } from 'vue-router'
+import { openXray } from '../lib/xrayui.js'
 
 const TABS = [['panel', 'Панель'], ['xray', 'Xray'], ['geo', 'Geo-файлы'], ['api', 'API и обновления']]
 const FP = ['chrome', 'firefox', 'safari', 'ios', 'edge', 'android', 'random', 'randomized']
-const tab = ref('panel')
+const route = useRoute()
+const tab = ref(TABS.some(t => t[0] === route.query.tab) ? route.query.tab : 'panel')
 const s = ref(null)
 const error = ref('')
 const pf = reactive({ port: 0, basePath: '', subPath: '', subPort: 0 })
@@ -233,6 +237,6 @@ async function doUpdate() {
 }
 watch(tab, (t) => { if (t === 'xray') { loadXray(); if (!vers.value) loadVersions() } if (t === 'geo') loadGeo(); if (t === 'api' && !upd.value) checkUpd() })
 let timer
-onMounted(() => { load(); loadXray(); timer = setInterval(() => { if (tab.value === 'xray') loadXray() }, 5000) })
+onMounted(() => { load(); loadXray(); if (tab.value === 'xray') loadVersions(); timer = setInterval(() => { if (tab.value === 'xray') loadXray() }, 5000) })
 onBeforeUnmount(() => clearInterval(timer))
 </script>

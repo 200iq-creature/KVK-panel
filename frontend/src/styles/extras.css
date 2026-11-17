@@ -135,3 +135,4 @@ html.h1.hack{background:#030604}
 :where(.h1) .i-pn>.tbl-w{border-top:1px solid var(--line2)}
 :where(.h1) .lr .acts{display:inline-flex;gap:4px}
 :where(.h1) .lr{flex-wrap:wrap}
+.h1 .i-hint.ok{background:var(--okSoft)}.h1 .i-hint.ok .ic{color:var(--ok)}.h1 .i-hint.bad{background:var(--badSoft)}.h1 .i-hint.bad .ic{color:var(--bad)}.h1 .i-hint .btn{flex:none;margin-top:-4px;margin-bottom:-4px}

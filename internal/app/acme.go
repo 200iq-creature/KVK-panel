@@ -207,6 +207,9 @@ func (a *App) ensurePort80() (func(), error) {
 	if (panelPort == 80 || subPort == 80) && a.PanelScheme() == "http" {
 		return func() {}, nil
 	}
+	if fakeRunning80() { // the decoy site answers challenges on :80
+		return func() {}, nil
+	}
 	ln, err := net.Listen("tcp", ":80")
 	if err != nil {
 		return nil, fmt.Errorf("порт 80 занят другой программой — он нужен Let's Encrypt для проверки. Освободите порт 80 (например, остановите nginx) и повторите")

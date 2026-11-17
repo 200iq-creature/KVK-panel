@@ -49,7 +49,7 @@ func (a *App) jobs() {
 			a.safe("remind", a.remindExpiring)
 			a.safe("tgproxy", a.tgProxyTick)
 			go a.safe("warp-fallback", a.warpFallbackTick)
-			if time.Since(lastCert) > 6*time.Hour {
+			if time.Since(lastCert) > 30*time.Minute {
 				lastCert = time.Now()
 				go a.safe("certs", a.renewCerts)
 			}
