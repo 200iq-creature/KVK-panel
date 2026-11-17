@@ -80,6 +80,8 @@ func (a *App) publicInbound(d *Data, in *Inbound) NodeInbound {
 	}
 	if in.ExternalHost != "" {
 		host = in.ExternalHost
+	} else if host == d.Settings.PublicHost && in.Front == "" && in.Security != "tls" && in.Protocol != "hysteria2" {
+		host = directHost(d, host)
 	}
 	port := in.Port
 	if in.ExternalPort > 0 {
@@ -142,6 +144,22 @@ func (a *App) publicInbound(d *Data, in *Inbound) NodeInbound {
 	return ep
 }
 
+// directHost replaces a link address that sits behind the Cloudflare proxy
+// (e.g. the panel was moved to HTTPS on an orange-cloud domain) with the server
+// IP: direct protocols such as Reality cannot pass through Cloudflare.
+func directHost(d *Data, host string) string {
+	fs := d.Settings.Fake
+	if !fs.Enabled || net.ParseIP(host) != nil || !containsStr(fs.CDNDomains, host) {
+		return host
+	}
+	for _, in := range d.Inbounds {
+		if in.Auto == "reality" && net.ParseIP(in.ExternalHost) != nil {
+			return in.ExternalHost
+		}
+	}
+	return host
+}
+
 // frontEndpoint rewrites an endpoint of an inbound hidden behind the decoy
 // website: clients connect with TLS to the domain (directly or through a CDN).
 func frontEndpoint(d *Data, in *Inbound, ep *NodeInbound, host string) {
@@ -154,6 +172,10 @@ func frontEndpoint(d *Data, in *Inbound, ep *NodeInbound, host string) {
 	}
 	ep.Host, ep.Port, ep.Security, ep.SNI, ep.HostHdr = host, port, "tls", host, host
 	ep.ALPN = []string{"h2", "http/1.1"}
+	if ep.Network == "ws" || ep.Network == "httpupgrade" {
+		ep.ALPN = []string{"http/1.1"} // WebSocket needs HTTP/1.1
+	}
+	ep.Front = true
 	ep.AllowInsecure, ep.CertSha256, ep.Flow = false, "", ""
 	if ep.Network == "xhttp" {
 		ep.XHTTPMode = "packet-up" // the only mode that survives every CDN

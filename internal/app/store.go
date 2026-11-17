@@ -87,6 +87,7 @@ type FakeSiteSettings struct {
 	Port       int      `json:"port"`       // public port of the Reality inbound (443)
 	TLSPort    int      `json:"tlsPort"`    // internal 127.0.0.1 HTTPS port of the decoy site
 	XHTTPPath  string   `json:"xhttpPath"`  // secret path proxied to the XHTTP inbound
+	WSPath     string   `json:"wsPath"`     // secret path proxied to the WebSocket inbound (sing-box/Clash clients)
 	CDN        bool     `json:"cdn"`        // XHTTP-over-CDN profile enabled
 	CustomHTML string   `json:"customHtml"` // optional own index.html
 	Email      string   `json:"email"`
@@ -257,6 +258,7 @@ type NodeInbound struct {
 	ObfsPassword  string   `json:"obfsPassword"`
 	AllowInsecure bool     `json:"allowInsecure"`
 	CertSha256    string   `json:"certSha256,omitempty"`
+	Front         bool     `json:"front,omitempty"` // reached through the decoy site / CDN
 }
 
 type Node struct {

@@ -89,6 +89,7 @@ func (a *App) Run() error {
 	} else {
 		log.Printf("xray binary not found in %s", a.BinDir)
 	}
+	go a.migrateAutoSetup()
 	if err := a.StartFakeSite(); err != nil {
 		log.Printf("fake site: %v", err)
 	}

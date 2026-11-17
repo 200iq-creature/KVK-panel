@@ -23,6 +23,40 @@ func isBrowserUA(ua string) bool {
 	return true
 }
 
+// filterFrontLinks picks the CDN transport the client understands: sing-box
+// based apps (Hiddify, NekoBox, Throne, Karing…) and Clash/mihomo have no
+// XHTTP, Xray based apps get XHTTP instead of the deprecated WebSocket.
+// Unknown clients receive both.
+func filterFrontLinks(links []linkItem, ua, format string) []linkItem {
+	l := strings.ToLower(ua)
+	has := func(keys ...string) bool {
+		for _, k := range keys {
+			if strings.Contains(l, k) {
+				return true
+			}
+		}
+		return false
+	}
+	drop := ""
+	switch {
+	case format == "clash" || has("sing-box", "singbox", "hiddify", "nekobox", "nekoray", "throne", "karing", "husi", "clash", "mihomo", "stash"):
+		drop = "xhttp"
+	case format == "json" || has("happ", "v2rayn", "v2raytun", "streisand", "incy", "v2box", "foxray", "xray"):
+		drop = "ws"
+	}
+	if drop == "" {
+		return links
+	}
+	out := make([]linkItem, 0, len(links))
+	for _, x := range links {
+		if x.ep.Front && x.ep.Network == drop {
+			continue
+		}
+		out = append(out, x)
+	}
+	return out
+}
+
 func b64(s string) string { return base64.StdEncoding.EncodeToString([]byte(s)) }
 
 func (a *App) handleSubscription(w http.ResponseWriter, r *http.Request, subID string) {
@@ -90,6 +124,7 @@ func (a *App) handleSubscription(w http.ResponseWriter, r *http.Request, subID s
 		return
 	}
 	_ = mainURL
+	links = filterFrontLinks(links, ua, format)
 
 	title := sub.Title
 	if title == "" {
