@@ -159,7 +159,7 @@ function toggleAll() {
   const ids = pageItems.value.map(c => c.id)
   sel.value = ids.every(id => sel.value.includes(id)) ? sel.value.filter(id => !ids.includes(id)) : [...new Set([...sel.value, ...ids])]
 }
-async function loadInbounds() { try { inbounds.value = (await get('inbounds')).inbounds } catch {} }
+async function loadInbounds() { try { const r = await get('inbounds'); inbounds.value = [...r.inbounds, ...(r.nodeInbounds || [])] } catch {} }
 function openNew() { creating.value = true; loadInbounds() }
 function closeClient() { open.value = ''; if (route.query.open) router.replace({ query: {} }) }
 async function create() {

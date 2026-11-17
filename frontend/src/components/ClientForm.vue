@@ -25,10 +25,16 @@
     <div class="fld">
       <label class="lbl">Инбаунды · {{ f.inbounds.length }} из {{ inbounds.length }}</label>
       <div class="list-rows">
-        <label v-for="i in inbounds" :key="i.id" class="lr" style="cursor:pointer">
-          <button class="chk" :class="{ on: f.inbounds.includes(i.id) }" type="button" @click.prevent="toggleInb(i.id)"><Icon n="check" /></button>
-          <span class="lr-t"><b>{{ i.remark }}</b><small>{{ PROTO[i.protocol] }} · {{ NET[i.network] || i.network }} · {{ SEC[i.security] || i.security }} · порт {{ i.port }}{{ i.enabled ? '' : ' · выключен' }}</small></span>
-        </label>
+        <template v-for="g in groups" :key="g.key">
+          <div v-if="groups.length > 1" class="inb-g">
+            <span><Icon :n="g.node ? 'link' : 'inb'" />{{ g.node ? 'Сервер «' + g.node + '»' : 'Этот сервер' }}<small v-if="g.node && !g.enabled"> · связка выключена</small></span>
+            <button class="btn btn-sm btn-g" type="button" @click="toggleGroup(g)">{{ g.items.every(i => f.inbounds.includes(i.id)) ? 'Снять' : 'Все' }}</button>
+          </div>
+          <label v-for="i in g.items" :key="i.id" class="lr" style="cursor:pointer">
+            <button class="chk" :class="{ on: f.inbounds.includes(i.id) }" type="button" @click.prevent="toggleInb(i.id)"><Icon n="check" /></button>
+            <span class="lr-t"><b>{{ i.remark }}</b><small>{{ PROTO[i.protocol] || i.protocol }} · {{ transport(i) }} · порт {{ i.port }}{{ i.enabled ? '' : (i.node ? '' : ' · выключен') }}</small></span>
+          </label>
+        </template>
         <p v-if="!inbounds.length" class="hint">Инбаундов нет — создайте их в разделе «Инбаунды».</p>
       </div>
       <div class="row"><button class="btn btn-sm btn-g" type="button" @click="f.inbounds = inbounds.map(i => i.id)">Все</button><button class="btn btn-sm btn-g" type="button" @click="f.inbounds = []">Ни одного</button></div>
@@ -60,6 +66,23 @@ watch(() => p.inbounds, (v) => { if (!c.id && !f.inbounds.length) f.inbounds = v
 const initReset = f.resetPeriod
 const tagList = computed(() => f.tagsText.split(',').map(s => s.trim()).filter(Boolean))
 function toggleTag(t) { const l = tagList.value; f.tagsText = (l.includes(t) ? l.filter(x => x !== t) : [...l, t]).join(', ') }
+// UDP-based protocols carry a placeholder network/security — show what they really use
+const OWN = { tuic: 'QUIC · TLS', hysteria2: 'QUIC · TLS', amneziawg: 'UDP', masque: 'HTTP/3 · TLS' }
+const transport = (i) => OWN[i.protocol] || `${NET[i.network] || i.network} · ${SEC[i.security] || i.security}`
+const groups = computed(() => {
+  const out = [{ key: 'local', node: '', enabled: true, items: p.inbounds.filter(i => !i.nodeId) }]
+  for (const i of p.inbounds) {
+    if (!i.nodeId) continue
+    let g = out.find(x => x.key === i.nodeId)
+    if (!g) { g = { key: i.nodeId, node: i.node, enabled: i.enabled, items: [] }; out.push(g) }
+    g.items.push(i)
+  }
+  return out.filter(g => g.items.length || g.key === 'local')
+})
+function toggleGroup(g) {
+  const ids = g.items.map(i => i.id)
+  f.inbounds = ids.every(id => f.inbounds.includes(id)) ? f.inbounds.filter(x => !ids.includes(x)) : [...new Set([...f.inbounds, ...ids])]
+}
 function toggleInb(id) { f.inbounds = f.inbounds.includes(id) ? f.inbounds.filter(x => x !== id) : [...f.inbounds, id] }
 
 function body() {

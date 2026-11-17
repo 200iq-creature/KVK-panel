@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 )
@@ -319,6 +320,20 @@ type Node struct {
 	LastError string        `json:"lastError"`
 	Inbounds  []NodeInbound `json:"inbounds"`
 	AddedAt   int64         `json:"addedAt"`
+	// Granted is set once the node's inbounds were handed out to the clients
+	// (on the first sync); after that access is chosen per client.
+	Granted bool `json:"granted,omitempty"`
+}
+
+// InboundIDs returns the unique (main-side) inbound ids of the node.
+func (n *Node) InboundIDs() []string {
+	out := []string{}
+	for _, ep := range n.Inbounds {
+		if !containsStr(out, ep.ID) {
+			out = append(out, ep.ID)
+		}
+	}
+	return out
 }
 
 type MainLink struct {
@@ -742,6 +757,65 @@ func (d *Data) InboundByID(id string) *Inbound {
 		}
 	}
 	return nil
+}
+
+// NodeInboundByID resolves a linked-server inbound id ("<nodeID>:<inboundID>").
+func (d *Data) NodeInboundByID(id string) (*Node, *NodeInbound) {
+	nid, _, found := strings.Cut(id, ":")
+	if !found {
+		return nil, nil
+	}
+	n := d.NodeByID(nid)
+	if n == nil {
+		return nil, nil
+	}
+	for i := range n.Inbounds {
+		if n.Inbounds[i].ID == id {
+			return n, &n.Inbounds[i]
+		}
+	}
+	return n, nil
+}
+
+// ValidInboundID reports whether id is a local inbound or an inbound of a linked server.
+func (d *Data) ValidInboundID(id string) bool {
+	if d.InboundByID(id) != nil {
+		return true
+	}
+	_, ep := d.NodeInboundByID(id)
+	return ep != nil
+}
+
+// DefaultGrant lists what a new client gets by default: every enabled local
+// inbound plus every inbound of the enabled linked servers.
+func (d *Data) DefaultGrant() []string {
+	out := []string{}
+	for _, in := range d.Inbounds {
+		if in.Enabled {
+			out = append(out, in.ID)
+		}
+	}
+	for _, n := range d.Nodes {
+		if n.Enabled {
+			out = append(out, n.InboundIDs()...)
+		}
+	}
+	return out
+}
+
+// dropNodeInbounds removes grants to inbounds of node nid that are not in keep (nil = all).
+func (d *Data) dropNodeInbounds(nid string, keep []string) {
+	prefix := nid + ":"
+	for _, c := range d.Clients {
+		kept := c.Inbounds[:0]
+		for _, id := range c.Inbounds {
+			if strings.HasPrefix(id, prefix) && !containsStr(keep, id) {
+				continue
+			}
+			kept = append(kept, id)
+		}
+		c.Inbounds = kept
+	}
 }
 
 func (d *Data) InboundByTag(tag string) *Inbound {

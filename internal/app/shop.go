@@ -895,16 +895,12 @@ func (a *App) shopEnsureClient(d *Data, s *ShopUser) *Client {
 	c.ExpiresAt = nowMs()
 	grant := []string{}
 	for _, id := range d.Settings.Shop.Inbounds {
-		if d.InboundByID(id) != nil {
+		if d.ValidInboundID(id) {
 			grant = append(grant, id)
 		}
 	}
 	if len(grant) == 0 {
-		for _, in := range d.Inbounds {
-			if in.Enabled {
-				grant = append(grant, in.ID)
-			}
-		}
+		grant = d.DefaultGrant()
 	}
 	c.Inbounds = grant
 	d.Clients = append(d.Clients, c)

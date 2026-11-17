@@ -274,6 +274,9 @@ func (a *App) clientLinks(d *Data, c *Client, includeDisabled bool) []linkItem {
 			continue
 		}
 		for _, ep := range n.Inbounds {
+			if n.Granted && !c.HasInbound(ep.ID) {
+				continue
+			}
 			nm := formatName(d.Sub.NameFormat, c.Name, n.Name, ep.Remark)
 			out = append(out, newLinkItem(ep, c, nm, n.Name))
 		}

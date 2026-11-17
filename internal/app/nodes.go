@@ -27,6 +27,10 @@ type syncClient struct {
 	Active      bool   `json:"active"`
 	WGKey       string `json:"wgKey,omitempty"`
 	WGIndex     int    `json:"wgIndex,omitempty"`
+	// Selective: Inbounds lists the node's own inbound ids the client may use.
+	// Without it (older main panels) the client gets every enabled inbound.
+	Selective bool     `json:"sel,omitempty"`
+	Inbounds  []string `json:"inbounds,omitempty"`
 }
 
 type syncPayload struct {
@@ -207,14 +211,23 @@ func (a *App) apiNodeSyncIn(w http.ResponseWriter, r *http.Request) error {
 				d.Clients = append(d.Clients, c)
 				changed = true
 			}
+			mine := grant
+			if sc.Selective {
+				mine = []string{}
+				for _, id := range grant {
+					if containsStr(sc.Inbounds, id) {
+						mine = append(mine, id)
+					}
+				}
+			}
 			if c.UUID != sc.UUID || c.Name != name || c.Password != sc.Password || c.ExpiresAt != sc.ExpiresAt ||
-				c.DeviceLimit != sc.DeviceLimit || c.Banned != !sc.Active || strings.Join(c.Inbounds, ",") != strings.Join(grant, ",") ||
+				c.DeviceLimit != sc.DeviceLimit || c.Banned != !sc.Active || strings.Join(c.Inbounds, ",") != strings.Join(mine, ",") ||
 				(sc.WGKey != "" && (c.WGKey != sc.WGKey || c.WGIndex != sc.WGIndex)) {
 				changed = true
 			}
 			c.UUID, c.Name, c.SubID, c.Password, c.ExpiresAt, c.DeviceLimit = sc.UUID, name, sc.SubID, sc.Password, sc.ExpiresAt, sc.DeviceLimit
 			c.Banned = !sc.Active
-			c.Inbounds = append([]string{}, grant...)
+			c.Inbounds = append([]string{}, mine...)
 			if sc.WGKey != "" {
 				// AmneziaWG: the same key and tunnel address on every server
 				c.WGKey, c.WGIndex = sc.WGKey, sc.WGIndex
@@ -306,35 +319,45 @@ func (a *App) SyncNodes() {
 }
 
 func (a *App) syncNodesNow() {
-	type target struct{ id, url, token string }
+	type target struct {
+		id, url, token string
+		payload        syncPayload
+	}
 	var targets []target
-	var payload syncPayload
 	now := nowMs()
 	a.Store.Read(func(d *Data) {
+		mainName, mainURL := d.Settings.NodeName, a.panelURLLocked(d)
 		for _, n := range d.Nodes {
-			if n.Enabled {
-				targets = append(targets, target{n.ID, n.URL, n.Token})
+			if !n.Enabled {
+				continue
 			}
-		}
-		if len(targets) == 0 {
-			return
-		}
-		payload.MainName = d.Settings.NodeName
-		payload.MainURL = a.panelURLLocked(d)
-		for _, c := range d.Clients {
-			if c.Origin == "main" {
-				continue // don't re-export clients we got from another main
+			p := syncPayload{MainName: mainName, MainURL: mainURL, Clients: []syncClient{}}
+			prefix := n.ID + ":"
+			for _, c := range d.Clients {
+				if c.Origin == "main" {
+					continue // don't re-export clients we got from another main
+				}
+				sc := syncClient{ID: c.ID, UUID: c.UUID, Name: c.Name, SubID: c.SubID, Password: c.Password,
+					ExpiresAt: c.ExpiresAt, DeviceLimit: c.DeviceLimit, Active: c.Status(now) == StActive, WGKey: c.WGKey, WGIndex: c.WGIndex}
+				if n.Granted {
+					// only the inbounds of this server chosen in the client card
+					for _, id := range c.Inbounds {
+						if strings.HasPrefix(id, prefix) {
+							sc.Inbounds = append(sc.Inbounds, strings.TrimPrefix(id, prefix))
+						}
+					}
+					if len(sc.Inbounds) == 0 {
+						continue // no access to this server at all
+					}
+					sc.Selective = true
+				}
+				p.Clients = append(p.Clients, sc)
 			}
-			st := c.Status(now)
-			payload.Clients = append(payload.Clients, syncClient{ID: c.ID, UUID: c.UUID, Name: c.Name, SubID: c.SubID, Password: c.Password,
-				ExpiresAt: c.ExpiresAt, DeviceLimit: c.DeviceLimit, Active: st == StActive, WGKey: c.WGKey, WGIndex: c.WGIndex})
+			targets = append(targets, target{n.ID, n.URL, n.Token, p})
 		}
 	})
 	if len(targets) == 0 {
 		return
-	}
-	if payload.Clients == nil {
-		payload.Clients = []syncClient{}
 	}
 	var wg sync.WaitGroup
 	type result struct {
@@ -350,13 +373,13 @@ func (a *App) syncNodesNow() {
 			defer wg.Done()
 			start := time.Now()
 			var ni nodeInfo
-			err := nodeCall("POST", t.url, t.token, "api/node/sync", payload, &ni)
+			err := nodeCall("POST", t.url, t.token, "api/node/sync", t.payload, &ni)
 			results <- result{t.id, &ni, err, int(time.Since(start).Milliseconds())}
 		}(t)
 	}
 	wg.Wait()
 	close(results)
-	statusChanged := false
+	statusChanged, resync := false, false
 	a.Store.Update(func(d *Data) error {
 		loc := moscow()
 		day := time.Now().In(loc).Format("2006-01-02")
@@ -390,6 +413,7 @@ func (a *App) syncNodesNow() {
 				n.Name = ni.Name
 			}
 			old, _ := json.Marshal(n.Inbounds)
+			oldIDs := n.InboundIDs()
 			n.Inbounds = ni.Inbounds
 			for i := range n.Inbounds {
 				n.Inbounds[i].ID = n.ID + ":" + n.Inbounds[i].ID
@@ -397,6 +421,10 @@ func (a *App) syncNodesNow() {
 			nw, _ := json.Marshal(n.Inbounds)
 			if !bytes.Equal(old, nw) {
 				statusChanged = true
+			}
+			if a.grantNodeInbounds(d, n, oldIDs) {
+				statusChanged = true
+				resync = true
 			}
 			for cid, tr := range ni.Traffic {
 				if c := d.ClientByID(cid); c != nil {
@@ -421,6 +449,67 @@ func (a *App) syncNodesNow() {
 	if statusChanged {
 		a.ScheduleApply()
 	}
+	if resync {
+		// grants changed — push the per-client inbound lists right away
+		go a.SyncNodes()
+	}
+}
+
+// grantNodeInbounds keeps client grants in step with a linked server's inbound
+// list: on the first sync every client gets all of its inbounds (that is how
+// linking worked before per-client choice); later a new inbound goes to the
+// clients that already use that server, and removed inbounds are dropped.
+func (a *App) grantNodeInbounds(d *Data, n *Node, oldIDs []string) bool {
+	ids := n.InboundIDs()
+	changed := false
+	if !n.Granted {
+		if len(ids) == 0 {
+			return false
+		}
+		for _, c := range d.Clients {
+			if c.Origin == "main" {
+				continue
+			}
+			for _, id := range ids {
+				if !c.HasInbound(id) {
+					c.Inbounds = append(c.Inbounds, id)
+				}
+			}
+		}
+		n.Granted = true
+		d.AddEvent("info", "Инбаунды сервера «"+n.Name+"» выданы всем клиентам — доступ можно менять в карточке клиента", "")
+		return true
+	}
+	prefix := n.ID + ":"
+	for _, id := range ids {
+		if containsStr(oldIDs, id) {
+			continue
+		}
+		for _, c := range d.Clients {
+			if c.Origin == "main" || c.HasInbound(id) {
+				continue
+			}
+			uses := false
+			for _, x := range c.Inbounds {
+				if strings.HasPrefix(x, prefix) {
+					uses = true
+					break
+				}
+			}
+			if uses {
+				c.Inbounds = append(c.Inbounds, id)
+				changed = true
+			}
+		}
+	}
+	for _, id := range oldIDs {
+		if !containsStr(ids, id) {
+			d.dropNodeInbounds(n.ID, ids)
+			changed = true
+			break
+		}
+	}
+	return changed
 }
 
 func (a *App) apiNodes(w http.ResponseWriter, r *http.Request) error {
@@ -580,6 +669,7 @@ func (a *App) apiNodeDelete(w http.ResponseWriter, r *http.Request) error {
 			if x.ID == id {
 				n = x
 				d.Nodes = append(d.Nodes[:i], d.Nodes[i+1:]...)
+				d.dropNodeInbounds(x.ID, nil)
 				d.AddEvent("info", "Сервер «"+x.Name+"» отвязан", "")
 				return nil
 			}

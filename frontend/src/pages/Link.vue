@@ -47,6 +47,7 @@
               </tbody>
             </table>
           </div>
+          <div v-if="data.nodes.length" class="i-pb" style="padding-top:0"><div class="i-hint"><Icon n="info" /><span>Инбаунды подключённых серверов при первой синхронизации выдаются всем клиентам и сразу попадают в их подписки. Кому какие оставить, выбирается в карточке клиента → «Инбаунды» (группа «Сервер «…»») или в боте-магазине для новых клиентов. Новый инбаунд на сервере получают клиенты, у которых уже есть доступ к этому серверу.</span></div></div>
           <div v-for="n in data.nodes.filter(x => x.enabled && x.lastError)" :key="'e' + n.id" class="i-pb" style="padding-top:0"><div class="i-hint bad"><Icon n="warn" /><span><b>{{ n.name }}:</b> {{ n.lastError }}</span></div></div>
         </section>
         <div class="i-c2">
