@@ -1,0 +1,6 @@
+/frontend/node_modules/
+/kvk-panel
+/build/
+/data/
+/release/
+*.log
