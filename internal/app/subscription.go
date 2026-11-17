@@ -177,7 +177,7 @@ func (a *App) handleSubscription(w http.ResponseWriter, r *http.Request, subID s
 		case strings.Contains(l, "clash") || strings.Contains(l, "mihomo") || strings.Contains(l, "stash"):
 			format = "clash"
 		case (strings.Contains(l, "happ") || strings.Contains(l, "v2raytun") || strings.Contains(l, "incy") || strings.Contains(l, "v2rayng")) &&
-			(sub.AutoSelect || sub.Fragment || strings.TrimSpace(sub.JSONTemplate) != "" || sub.HappRoutingRU):
+			(sub.AutoSelect || sub.Fragment || strings.TrimSpace(sub.JSONTemplate) != "" || sub.HappRoutingRU || hasConfigType(links, "xray-json")):
 			format = "json"
 		}
 	}
@@ -206,6 +206,17 @@ func (a *App) handleSubscription(w http.ResponseWriter, r *http.Request, subID s
 		}
 		_, _ = w.Write([]byte(base64.StdEncoding.EncodeToString([]byte(strings.Join(lines, "\n")))))
 	}
+}
+
+// hasConfigType reports whether some config exists only as a full client
+// config (e.g. MASQUE, which has no share link) — such clients need JSON.
+func hasConfigType(links []linkItem, t string) bool {
+	for _, l := range links {
+		if l.ConfigType == t && l.Link == "" {
+			return true
+		}
+	}
+	return false
 }
 
 func asciiOnly(s string) string {

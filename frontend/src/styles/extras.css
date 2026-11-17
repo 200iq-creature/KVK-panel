@@ -136,3 +136,6 @@ html.h1.hack{background:#030604}
 :where(.h1) .lr .acts{display:inline-flex;gap:4px}
 :where(.h1) .lr{flex-wrap:wrap}
 .h1 .i-hint.ok{background:var(--okSoft)}.h1 .i-hint.ok .ic{color:var(--ok)}.h1 .i-hint.bad{background:var(--badSoft)}.h1 .i-hint.bad .ic{color:var(--bad)}.h1 .i-hint .btn{flex:none;margin-top:-4px;margin-bottom:-4px}
+/* sub page: panels without a header row need top padding */
+.h1 .sp-in .i-pn>.i-pb:first-child{padding-top:18px}
+.h1 .sp-in .lr .acts{display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:flex-end}

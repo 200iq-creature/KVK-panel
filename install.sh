@@ -15,11 +15,31 @@ BIN="$INSTALL_DIR/kvk-panel"
 XRAY_DIR="$INSTALL_DIR/bin"
 DATA_DIR="/etc/kvk-panel"
 BRANCH_FILE="$DATA_DIR/branch"
-# branch priority: `update BRANCH` argument > KVK_BRANCH > remembered branch > main
+# Branch this copy of the script was published in. When the script is run
+# straight from a branch URL without arguments, that branch is used if its
+# VERSION is newer than the one of the remembered branch (after merging into
+# main the versions are equal, so main wins).
+SCRIPT_BRANCH="arena/3b5bfb45-kvk-panel"
+# branch priority: `update BRANCH` argument > KVK_BRANCH > newer SCRIPT_BRANCH > remembered branch > main
 BRANCH="${KVK_BRANCH:-}"
-[ -n "$BRANCH" ] || BRANCH="$(tr -d ' \n\r' 2>/dev/null <"$BRANCH_FILE" || true)"
 if [ "${1:-}" = "update" ] || [ "${1:-}" = "install" ]; then [ -n "${2:-}" ] && BRANCH="$2"; fi
-BRANCH="${BRANCH:-main}"
+SAVED_BRANCH="$(tr -d ' \n\r' 2>/dev/null <"$BRANCH_FILE" || true)"
+SAVED_BRANCH="${SAVED_BRANCH:-main}"
+
+branch_version() {
+  curl -fsSL --max-time 15 -H 'Cache-Control: no-cache' "https://raw.githubusercontent.com/$REPO/$1/VERSION" 2>/dev/null | tr -d ' \n\r' || true
+}
+# version_gt A B — true when A > B (dotted numbers)
+version_gt() { [ "$1" != "$2" ] && [ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | tail -1)" = "$1" ]; }
+
+if [ -z "$BRANCH" ]; then
+  BRANCH="$SAVED_BRANCH"
+  if [ "$SCRIPT_BRANCH" != "$SAVED_BRANCH" ] && command -v curl >/dev/null 2>&1; then
+    sv="$(branch_version "$SCRIPT_BRANCH")"
+    bv="$(branch_version "$SAVED_BRANCH")"
+    if [ -n "$sv" ] && version_gt "$sv" "${bv:-0}"; then BRANCH="$SCRIPT_BRANCH"; fi
+  fi
+fi
 SERVICE="kvk-panel"
 GO_VERSION="1.25.5"
 
@@ -119,9 +139,7 @@ build_from_source() {
 }
 
 # remote_version — VERSION file of the selected branch
-remote_version() {
-  curl -fsSL --max-time 15 "https://raw.githubusercontent.com/$REPO/$BRANCH/VERSION" 2>/dev/null | tr -d ' \n\r' || true
-}
+remote_version() { branch_version "$BRANCH"; }
 
 fetch_binary() {
   local dest="$1" tag want
