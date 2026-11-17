@@ -3,6 +3,7 @@ export const NAV = [
     { id: 'overview', label: 'Обзор', icon: 'overview', to: '/', desc: 'клиенты, трафик, связка, события' },
     { id: 'clients', label: 'Клиенты', icon: 'clients', to: '/clients', desc: 'клиенты, теги, массовые действия', count: true },
     { id: 'sub', label: 'Подписка', icon: 'sub', to: '/sub', desc: 'название, автовыбор, внешние ссылки, страница в браузере' },
+    { id: 'auto', label: 'VLESS за минуту', icon: 'bolt', to: '/vless', desc: 'автонастройка: Reality, фейк-сайт, CDN Cloudflare, сертификаты' },
   ] },
   { label: 'Продажи', items: [
     { id: 'shop', label: 'Бот-магазин', icon: 'shop', to: '/shop', desc: 'тарифы, оплаты, промокоды, рассылка' },

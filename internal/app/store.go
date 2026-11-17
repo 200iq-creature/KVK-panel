@@ -72,6 +72,26 @@ type Settings struct {
 	Shop ShopSettings `json:"shop"`
 	// telegram proxy
 	TgProxy TgProxySettings `json:"tgProxy"`
+	// VLESS auto-setup: decoy website + Reality/CDN inbounds
+	Fake FakeSiteSettings `json:"fake"`
+}
+
+// FakeSiteSettings describes the decoy website that fronts the auto-configured
+// VLESS Reality inbound (Reality "steals" the TLS handshake from it) and the
+// XHTTP inbound reachable through a CDN such as Cloudflare.
+type FakeSiteSettings struct {
+	Enabled    bool     `json:"enabled"`
+	Domains    []string `json:"domains"`    // all decoy domains (Reality serverNames)
+	SNI        string   `json:"sni"`        // main SNI used in Reality links
+	CDNDomains []string `json:"cdnDomains"` // domains used for XHTTP-over-CDN links
+	Port       int      `json:"port"`       // public port of the Reality inbound (443)
+	TLSPort    int      `json:"tlsPort"`    // internal 127.0.0.1 HTTPS port of the decoy site
+	XHTTPPath  string   `json:"xhttpPath"`  // secret path proxied to the XHTTP inbound
+	CDN        bool     `json:"cdn"`        // XHTTP-over-CDN profile enabled
+	CustomHTML string   `json:"customHtml"` // optional own index.html
+	Email      string   `json:"email"`
+	CFToken    string   `json:"cfToken"`
+	SetupAt    int64    `json:"setupAt"`
 }
 
 type SubSettings struct {
@@ -166,10 +186,15 @@ type Inbound struct {
 	// links
 	ExternalHost string `json:"externalHost"`
 	ExternalPort int    `json:"externalPort"`
-	Sniffing     bool   `json:"sniffing"`
-	Up           int64  `json:"up"`
-	Down         int64  `json:"down"`
-	CreatedAt    int64  `json:"createdAt"`
+	// Front = "fake": the inbound listens on localhost behind the decoy website,
+	// links use TLS with FrontHosts as address/SNI (one link per host).
+	Front      string   `json:"front,omitempty"`
+	FrontHosts []string `json:"frontHosts,omitempty"`
+	Auto       string   `json:"auto,omitempty"` // reality | cdn — created by auto-setup
+	Sniffing   bool     `json:"sniffing"`
+	Up         int64    `json:"up"`
+	Down       int64    `json:"down"`
+	CreatedAt  int64    `json:"createdAt"`
 }
 
 type Client struct {

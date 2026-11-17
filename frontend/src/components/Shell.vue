@@ -8,6 +8,7 @@
         <span><b>KVK Panel</b><em>{{ meta.node || 'сервер' }} · {{ meta.host }} · v{{ meta.version || session.version }}</em></span>
       </router-link>
       <span class="tx-sp"></span>
+      <button v-if="meta.loaded" class="tx-xr" type="button" :title="'Ядро Xray — сменить версию, обновить или откатить'" @click="openXray"><i :class="meta.xray?.running ? 'ok' : 'bad'"></i><span>Xray</span><b>{{ meta.xray?.version ? 'v' + meta.xray.version : 'нет' }}</b></button>
       <button class="kbar" type="button" aria-haspopup="dialog" @click="kOpen = true"><Icon n="search" /><span>Клиент, раздел или действие…</span><span class="kbd">Ctrl K</span></button>
       <button class="tx-ib tx-th" type="button" :title="'Тема: ' + themeLabel" :aria-label="'Тема: ' + themeLabel" @click="cycleTheme"><Icon :n="theme.mode === 'light' ? 'sun' : theme.mode === 'system' ? 'auto' : 'moon'" /></button>
       <span class="tx-mew">
@@ -22,6 +23,7 @@
             <hr>
             <router-link to="/settings" @click="menuOpen = false"><Icon n="set" />Настройки</router-link>
             <router-link to="/security" @click="menuOpen = false"><Icon n="sec" />Безопасность</router-link>
+            <button type="button" @click="menuOpen = false; openXray()"><Icon n="cpu" />Версия Xray</button>
             <button type="button" @click="restartXray"><Icon n="refresh" />Перезапустить Xray</button>
             <hr>
             <button type="button" @click="logout"><Icon n="logout" />Выйти</button>
@@ -44,13 +46,14 @@
       </aside>
       <main class="tx-main">
         <div v-if="meta.xray && meta.loaded && !meta.xray.running" class="i-alrt" style="margin:0 0 14px">
-          <Icon n="warn" /><span><b>Xray не запущен.</b> <span class="muted">{{ meta.xray.error || (meta.xray.installed ? 'Клиенты не могут подключиться.' : 'Ядро Xray не установлено — установите его в «Настройках».') }}</span></span>
-          <router-link class="btn btn-sm" to="/settings">Настройки Xray</router-link>
+          <Icon n="warn" /><span><b>Xray не запущен.</b> <span class="muted">{{ meta.xray.error || (meta.xray.installed ? 'Клиенты не могут подключиться.' : 'Ядро Xray не установлено — нажмите «Установить Xray».') }}</span></span>
+          <button class="btn btn-sm" type="button" @click="openXray">{{ meta.xray.installed ? 'Ядро Xray' : 'Установить Xray' }}</button>
         </div>
         <router-view v-slot="{ Component }"><component :is="Component" :key="route.path" /></router-view>
       </main>
     </div>
     <Kbar v-model:open="kOpen" />
+    <XrayModal />
   </div>
 </template>
 <script setup>
@@ -58,6 +61,8 @@ import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import Icon from './Icon.vue'
 import Kbar from './Kbar.vue'
+import XrayModal from './XrayModal.vue'
+import { openXray } from '../lib/xrayui.js'
 import { NAV } from '../lib/nav.js'
 import { meta, loadMeta } from '../lib/meta.js'
 import { session, post, LOGO } from '../lib/api.js'

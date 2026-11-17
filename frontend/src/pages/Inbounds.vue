@@ -72,7 +72,7 @@
                 </div>
               </div>
               <Empty v-if="!list.length" icon="inb" title="Инбаундов пока нет" text="Начните с VLESS Reality на порту 443 — он лучше всего проходит блокировки">
-                <button class="btn btn-sm" type="button" @click="openForm(null)"><Icon n="plus" />Новый инбаунд</button>
+                <div class="row"><router-link class="btn btn-sm btn-p" to="/vless"><Icon n="bolt" />Настроить автоматически</router-link><button class="btn btn-sm" type="button" @click="openForm(null)"><Icon n="plus" />Новый инбаунд</button></div>
               </Empty>
             </div>
           </div>

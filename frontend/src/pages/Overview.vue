@@ -3,7 +3,7 @@
     <div class="pagein i-wrap">
       <div class="i-hd">
         <div><span class="dz-eb">панель · {{ d?.node || meta.node }} · <span class="i-mono">{{ d?.host || meta.host }}</span></span><h1>Обзор</h1></div>
-        <div class="i-hd-a"><router-link class="btn btn-p" to="/clients?new=1"><Icon n="plus" />Создать клиента</router-link></div>
+        <div class="i-hd-a row"><router-link v-if="!meta.inbounds" class="btn" to="/vless"><Icon n="bolt" />VLESS за минуту</router-link><router-link class="btn btn-p" to="/clients?new=1"><Icon n="plus" />Создать клиента</router-link></div>
       </div>
       <Loading v-if="!d" :error="error" @retry="reload" />
       <template v-else>
@@ -67,7 +67,7 @@
                 <div class="i-meter"><div><span class="dz-mn">Память · {{ bytes(d.sys.memUsed) }} из {{ bytes(d.sys.memTotal) }}</span><b>{{ pct(d.sys.memUsed, d.sys.memTotal) }}%</b></div><div class="i-mpr" :class="tone(pct(d.sys.memUsed, d.sys.memTotal))"><i :style="{ width: pct(d.sys.memUsed, d.sys.memTotal) + '%' }"></i></div></div>
                 <div class="i-meter"><div><span class="dz-mn">Диск · {{ bytes(d.sys.diskUsed) }} из {{ bytes(d.sys.diskTotal) }}</span><b>{{ pct(d.sys.diskUsed, d.sys.diskTotal) }}%</b></div><div class="i-mpr" :class="tone(pct(d.sys.diskUsed, d.sys.diskTotal))"><i :style="{ width: pct(d.sys.diskUsed, d.sys.diskTotal) + '%' }"></i></div></div>
                 <div class="i-kv">
-                  <div class="i-kr"><span>Xray</span><b><span class="i-stt" :class="d.xray.running ? 'ok' : 'bad'">{{ d.xray.running ? `работает · v${d.xray.version} · ${uptime(d.xray.uptime)}` : (d.xray.error || 'остановлен') }}</span></b><span class="row"><button class="btn btn-sm" type="button" :disabled="busy.x" @click="xray('restart')"><Icon n="refresh" />Перезапустить</button><button v-if="d.xray.running" class="btn btn-sm btn-g" type="button" :disabled="busy.x" @click="xray('stop')">Остановить</button><button v-else class="btn btn-sm btn-p" type="button" :disabled="busy.x" @click="xray('start')">Запустить</button></span></div>
+                  <div class="i-kr"><span>Xray</span><b><span class="i-stt" :class="d.xray.running ? 'ok' : 'bad'">{{ d.xray.running ? `работает · v${d.xray.version} · ${uptime(d.xray.uptime)}` : (d.xray.error || 'остановлен') }}</span></b><span class="row"><button class="btn btn-sm btn-g" type="button" title="Сменить версию, обновить или откатить" @click="openXray"><Icon n="cpu" />Версия</button><button class="btn btn-sm" type="button" :disabled="busy.x" @click="xray('restart')"><Icon n="refresh" />Перезапустить</button><button v-if="d.xray.running" class="btn btn-sm btn-g" type="button" :disabled="busy.x" @click="xray('stop')">Остановить</button><button v-else class="btn btn-sm btn-p" type="button" :disabled="busy.x" @click="xray('start')">Запустить</button></span></div>
                 </div>
               </div>
             </section>
@@ -98,6 +98,7 @@
   </div>
 </template>
 <script setup>
+import { openXray } from '../lib/xrayui.js'
 import '../styles/Overview.css'
 import { ref, reactive, computed } from 'vue'
 import Icon from '../components/Icon.vue'

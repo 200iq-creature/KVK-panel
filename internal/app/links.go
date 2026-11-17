@@ -136,7 +136,45 @@ func (a *App) publicInbound(d *Data, in *Inbound) NodeInbound {
 			}
 		}
 	}
+	if in.Front == "fake" && len(in.FrontHosts) > 0 {
+		frontEndpoint(d, in, &ep, in.FrontHosts[0])
+	}
 	return ep
+}
+
+// frontEndpoint rewrites an endpoint of an inbound hidden behind the decoy
+// website: clients connect with TLS to the domain (directly or through a CDN).
+func frontEndpoint(d *Data, in *Inbound, ep *NodeInbound, host string) {
+	port := d.Settings.Fake.Port
+	if in.ExternalPort > 0 {
+		port = in.ExternalPort
+	}
+	if port == 0 {
+		port = 443
+	}
+	ep.Host, ep.Port, ep.Security, ep.SNI, ep.HostHdr = host, port, "tls", host, host
+	ep.ALPN = []string{"h2", "http/1.1"}
+	ep.AllowInsecure, ep.CertSha256, ep.Flow = false, "", ""
+	if ep.Network == "xhttp" {
+		ep.XHTTPMode = "packet-up" // the only mode that survives every CDN
+	}
+}
+
+// publicInbounds returns every endpoint of an inbound (front inbounds produce
+// one endpoint per CDN domain).
+func (a *App) publicInbounds(d *Data, in *Inbound) []NodeInbound {
+	ep := a.publicInbound(d, in)
+	if in.Front != "fake" || len(in.FrontHosts) < 2 {
+		return []NodeInbound{ep}
+	}
+	out := []NodeInbound{}
+	for _, h := range in.FrontHosts {
+		e := ep
+		frontEndpoint(d, in, &e, h)
+		e.Remark = in.Remark + " · " + h
+		out = append(out, e)
+	}
+	return out
 }
 
 func formatName(tpl, name, node, label string) string {
@@ -170,9 +208,10 @@ func (a *App) clientLinks(d *Data, c *Client, includeDisabled bool) []linkItem {
 		if !c.HasInbound(in.ID) {
 			continue
 		}
-		ep := a.publicInbound(d, in)
-		nm := formatName(d.Sub.NameFormat, c.Name, node, in.Remark)
-		out = append(out, linkItem{Name: nm, Link: buildLink(ep, c, nm), Protocol: in.Protocol, Node: node, Inbound: in.Remark, Network: ep.Network, Security: ep.Security, ep: ep})
+		for _, ep := range a.publicInbounds(d, in) {
+			nm := formatName(d.Sub.NameFormat, c.Name, node, ep.Remark)
+			out = append(out, linkItem{Name: nm, Link: buildLink(ep, c, nm), Protocol: in.Protocol, Node: node, Inbound: ep.Remark, Network: ep.Network, Security: ep.Security, ep: ep})
+		}
 	}
 	for _, n := range d.Nodes {
 		if !n.Enabled {

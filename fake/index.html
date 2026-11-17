@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>atelier</title>
+<meta name="description" content="Slow geometry, printed matter and small machines that draw.">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<style>
+  :root { --paper:#f3efe6; --ink:#1d1b19; --mute:#77706a; --line:rgba(29,27,25,.14); --p1:#d9472b; --p2:#2b59c3; --p3:#e8b931; --p4:#1d1b19; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  html { scroll-behavior:smooth; }
+  body { background:var(--paper); color:var(--ink); font:16px/1.6 ui-serif, "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif; -webkit-font-smoothing:antialiased; overflow-x:hidden; }
+  body::before { content:""; position:fixed; inset:0; pointer-events:none; z-index:50; opacity:.35; mix-blend-mode:multiply;
+    background-image:radial-gradient(rgba(0,0,0,.06) 1px, transparent 1px); background-size:3px 3px; }
+  a { color:inherit; text-decoration-thickness:1px; text-underline-offset:3px; }
+  .sans { font-family:ui-sans-serif, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+  header { position:sticky; top:0; z-index:10; display:flex; justify-content:space-between; align-items:baseline; gap:16px;
+    padding:18px clamp(18px,5vw,64px); background:color-mix(in srgb, var(--paper) 86%, transparent); backdrop-filter:blur(8px); border-bottom:1px solid var(--line); }
+  .brand { font-size:20px; font-style:italic; text-decoration:none; letter-spacing:-.01em; }
+  .brand sup { font-style:normal; font-size:10px; letter-spacing:.12em; margin-left:6px; color:var(--mute); }
+  nav { display:flex; gap:clamp(14px,2.6vw,30px); font-size:12px; letter-spacing:.14em; text-transform:uppercase; }
+  nav a { text-decoration:none; color:var(--mute); }
+  nav a:hover { color:var(--ink); }
+  .hero { display:grid; grid-template-columns:minmax(0,1.05fr) minmax(0,1fr); gap:clamp(24px,5vw,72px); align-items:center;
+    padding:clamp(40px,8vw,110px) clamp(18px,5vw,64px) clamp(40px,7vw,90px); min-height:calc(100vh - 62px); }
+  .hero h1 { font-weight:400; font-size:clamp(46px,7.4vw,112px); line-height:.95; letter-spacing:-.03em; }
+  .hero h1 i { color:var(--p1); }
+  .hero p { margin-top:26px; max-width:40ch; font-size:clamp(16px,1.5vw,19px); color:var(--mute); }
+  .meta { margin-top:30px; display:flex; flex-wrap:wrap; gap:10px 26px; font-size:12px; letter-spacing:.12em; text-transform:uppercase; color:var(--mute); }
+  .meta b { color:var(--ink); font-weight:600; }
+  .stage { position:relative; aspect-ratio:1; width:100%; max-width:640px; justify-self:end; }
+  .stage canvas { width:100%; height:100%; display:block; border-radius:50%; }
+  .stage .tag { position:absolute; right:4%; bottom:6%; font-size:11px; letter-spacing:.14em; text-transform:uppercase; background:var(--paper); padding:4px 10px; border:1px solid var(--line); border-radius:99px; }
+  section { padding:clamp(56px,8vw,110px) clamp(18px,5vw,64px); border-top:1px solid var(--line); }
+  .sh { display:flex; justify-content:space-between; align-items:baseline; gap:16px; flex-wrap:wrap; margin-bottom:clamp(26px,4vw,44px); }
+  .sh h2 { font-weight:400; font-size:clamp(30px,4vw,52px); letter-spacing:-.02em; }
+  .sh span { font-size:12px; letter-spacing:.14em; text-transform:uppercase; color:var(--mute); }
+  .works { display:grid; grid-template-columns:repeat(auto-fill,minmax(min(100%,240px),1fr)); gap:clamp(18px,2.4vw,30px) clamp(14px,2vw,24px); }
+  .work { cursor:zoom-in; }
+  .work canvas { width:100%; aspect-ratio:3/4; display:block; box-shadow:0 1px 0 var(--line), 0 18px 30px -22px rgba(0,0,0,.35); transition:transform .45s cubic-bezier(.2,.7,.2,1); }
+  .work:hover canvas { transform:rotate(-1deg) translateY(-6px); }
+  .work .cap { display:flex; justify-content:space-between; gap:10px; margin-top:12px; font-size:14px; }
+  .work .cap em { color:var(--mute); font-style:normal; font-size:13px; }
+  .two { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,330px),1fr)); gap:clamp(26px,5vw,80px); }
+  .lead { font-size:clamp(22px,2.5vw,32px); line-height:1.3; letter-spacing:-.01em; }
+  .two p + p { margin-top:14px; color:var(--mute); }
+  .facts { list-style:none; margin-top:26px; display:grid; grid-template-columns:repeat(3,1fr); border-top:1px solid var(--line); }
+  .facts li { padding:16px 0; }
+  .facts b { display:block; font-size:clamp(26px,3vw,40px); font-weight:400; }
+  .facts span { font-size:12px; letter-spacing:.1em; text-transform:uppercase; color:var(--mute); }
+  .notes { list-style:none; }
+  .notes li { display:grid; grid-template-columns:120px 1fr 90px; gap:18px; padding:18px 0; border-bottom:1px dashed var(--line); align-items:baseline; }
+  .notes time, .notes small { font-size:13px; color:var(--mute); font-variant-numeric:tabular-nums; }
+  .notes small { text-align:right; letter-spacing:.1em; text-transform:uppercase; font-size:11px; }
+  .contact { display:flex; justify-content:space-between; align-items:flex-end; flex-wrap:wrap; gap:24px; }
+  .contact a.big { font-size:clamp(28px,5vw,64px); letter-spacing:-.02em; font-style:italic; }
+  .contact p { color:var(--mute); max-width:36ch; }
+  footer { display:flex; justify-content:space-between; flex-wrap:wrap; gap:12px; padding:26px clamp(18px,5vw,64px); border-top:1px solid var(--line); font-size:13px; color:var(--mute); }
+  .lb { position:fixed; inset:0; z-index:60; display:none; place-items:center; background:color-mix(in srgb, var(--paper) 94%, transparent); padding:18px; cursor:zoom-out; }
+  .lb.on { display:grid; }
+  .lb canvas { max-width:min(90vw,620px); max-height:80vh; width:auto; height:auto; box-shadow:0 30px 60px -30px rgba(0,0,0,.45); }
+  .lb p { margin-top:14px; text-align:center; font-size:13px; color:var(--mute); }
+  @media (max-width:820px) { .hero { grid-template-columns:1fr; min-height:0; } .stage { justify-self:center; max-width:460px; order:-1; } }
+  @media (max-width:560px) { nav a:not(:last-child) { display:none; } .notes li { grid-template-columns:1fr; gap:2px; } .notes small { text-align:left; } .facts { grid-template-columns:1fr 1fr; } }
+</style>
+</head>
+<body>
+<header>
+  <a class="brand" href="#" id="brand">atelier</a>
+  <nav class="sans"><a href="#works">Works</a><a href="#studio">Studio</a><a href="#notes">Notes</a><a href="#contact">Contact</a></nav>
+</header>
+<main>
+  <div class="hero">
+    <div>
+      <h1 id="headline">Quiet <i>geometry</i> for loud rooms.</h1>
+      <p id="lede">Pen-plotted prints, posters and small drawing machines. Every piece starts from one number and a lot of patience.</p>
+      <div class="meta sans"><span><b>drag</b> spin the orbit</span><span><b>tap</b> new seed</span><span id="seedlabel"><b>seed</b> —</span></div>
+    </div>
+    <div class="stage"><canvas id="orbit" width="1200" height="1200" aria-hidden="true"></canvas><span class="tag sans" id="stagetag">study</span></div>
+  </div>
+  <section id="works">
+    <div class="sh"><h2>Selected works</h2><span class="sans" id="count">—</span></div>
+    <div class="works" id="grid"></div>
+  </section>
+  <section id="studio">
+    <div class="sh"><h2>The studio</h2><span class="sans" id="since">—</span></div>
+    <div class="two">
+      <p class="lead" id="about">—</p>
+      <div>
+        <p id="about2">—</p>
+        <p>Nothing on this page is a photograph. The drawings are recomputed in your browser each time you visit, so the version you see is yours alone.</p>
+        <ul class="facts sans"><li><b id="f1">—</b><span>prints made</span></li><li><b id="f2">—</b><span>pens worn out</span></li><li><b id="f3">—</b><span>exhibitions</span></li></ul>
+      </div>
+    </div>
+  </section>
+  <section id="notes">
+    <div class="sh"><h2>Notes</h2><span class="sans">from the desk</span></div>
+    <ul class="notes" id="notelist"></ul>
+  </section>
+  <section id="contact">
+    <div class="contact">
+      <div><span class="sans" style="font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--mute)">Commissions &amp; prints</span><br><a class="big" id="mail" href="#">hello@studio</a></div>
+      <p id="contacttext">Open for a handful of commissions each season — editions, wall pieces and the occasional strange machine.</p>
+    </div>
+  </section>
+</main>
+<footer class="sans"><span id="copy">©</span><span id="clock">—</span></footer>
+<div class="lb" id="lb"><div><canvas id="lbc" width="900" height="1200"></canvas><p class="sans" id="lbp"></p></div></div>
+<script>
+(() => {
+  const host = (location.hostname || 'atelier.local').toLowerCase().replace(/^www\./, '');
+  function hash(s) { let h = 2166136261 >>> 0; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
+  function rng(seed) { let a = seed >>> 0; return () => { a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+  const base = hash(host + '#atelier');
+  const R = rng(base);
+  const pick = (a, r = R) => a[Math.floor(r() * a.length)];
+
+  const THEMES = [
+    { paper:'#f3efe6', ink:'#1d1b19', p:['#d9472b', '#2b59c3', '#e8b931', '#1d1b19'] },
+    { paper:'#eef0ea', ink:'#16201c', p:['#0f7b5f', '#e2603f', '#f2c14e', '#16201c'] },
+    { paper:'#f6ece8', ink:'#2a1a1f', p:['#b8325a', '#3c4f9e', '#f0a04b', '#2a1a1f'] },
+    { paper:'#ecebf3', ink:'#1a1a2e', p:['#5b3fd6', '#ff7a59', '#2ec4b6', '#1a1a2e'] },
+    { paper:'#f4f1e8', ink:'#222222', p:['#ef476f', '#118ab2', '#ffd166', '#073b4c'] },
+    { paper:'#efe9dd', ink:'#2b2620', p:['#a44a3f', '#5d7b6f', '#d7a449', '#2b2620'] },
+  ];
+  const th = pick(THEMES), pal = th.p;
+  const root = document.documentElement.style;
+  root.setProperty('--paper', th.paper); root.setProperty('--ink', th.ink);
+  pal.forEach((c, i) => root.setProperty('--p' + (i + 1), c));
+
+  const FIRST = ['Lena', 'Matteo', 'Ines', 'Jonas', 'Maren', 'Teo', 'Alba', 'Niklas', 'Clara', 'Sami', 'Vera', 'Emil', 'Noor', 'Oskar', 'Ida', 'Lucas'];
+  const LAST = ['Verhoeven', 'Sorensen', 'Albrecht', 'Kowal', 'Marchetti', 'Lindgren', 'Duval', 'Eriksen', 'Pohl', 'Varga', 'Nyberg', 'Costa'];
+  const person = pick(FIRST) + ' ' + pick(LAST);
+  const STUDIO = pick(['orbit', 'margin', 'paper', 'compass', 'meridian', 'linen', 'graphite', 'quarry']) + ' ' + pick(['atelier', 'works', 'press', 'office', 'room']);
+  const city = pick(['Ghent', 'Bologna', 'Aarhus', 'Kraków', 'Utrecht', 'Lyon', 'Graz', 'Malmö', 'Bilbao', 'Tartu', 'Basel', 'Brno']);
+  const HEAD = [['Quiet', 'geometry', 'for loud rooms.'], ['Circles that', 'refuse', 'to close.'], ['Ink, rules', 'and', 'a little luck.'], ['Patterns with', 'patience', 'built in.'], ['Drawn by', 'machines', ', checked by hand.'], ['Small', 'orbits', ', printed slowly.']];
+  const hd = pick(HEAD);
+  document.title = STUDIO + ' — ' + person;
+  document.getElementById('brand').innerHTML = '';
+  document.getElementById('brand').append(document.createTextNode(STUDIO));
+  const sup = document.createElement('sup'); sup.className = 'sans'; sup.textContent = city.toUpperCase(); document.getElementById('brand').append(sup);
+  document.getElementById('headline').innerHTML = hd[0] + ' <i>' + hd[1] + '</i>' + (hd[2].startsWith(',') ? '' : ' ') + hd[2];
+  const since = 2012 + Math.floor(R() * 9);
+  document.getElementById('since').textContent = 'since ' + since + ' · ' + city;
+  document.getElementById('about').textContent = person + ' runs ' + STUDIO + ' from a narrow room in ' + city + ', somewhere between a print shop and a workshop for drawing machines.';
+  document.getElementById('about2').textContent = 'It began in ' + since + ' with a second-hand plotter and a box of pens. Today the studio makes editions for galleries, posters for festivals and, now and then, a machine that draws on its own.';
+  document.getElementById('f1').textContent = 300 + Math.floor(R() * 1700);
+  document.getElementById('f2').textContent = 80 + Math.floor(R() * 600);
+  document.getElementById('f3').textContent = 6 + Math.floor(R() * 30);
+  const mail = 'hello@' + (host.includes('.') ? host : 'atelier.studio');
+  const m = document.getElementById('mail'); m.textContent = mail; m.href = 'mailto:' + mail;
+  document.getElementById('copy').textContent = '© ' + new Date().getFullYear() + ' ' + STUDIO + ' · ' + person;
+
+  // ---- hero: orbit study ----
+  const oc = document.getElementById('orbit'), og = oc.getContext('2d');
+  let seed = base, spin = 0, vel = 0.0016, drag = null;
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  function orbits(s) {
+    const r = rng(s), n = 9 + Math.floor(r() * 9);
+    return Array.from({ length: n }, (_, i) => ({ rad: 0.12 + (i / n) * 0.36 + r() * 0.02, ecc: 0.55 + r() * 0.45, tilt: r() * Math.PI, sp: (r() - .5) * 2.4, dots: 3 + Math.floor(r() * 18), c: pal[Math.floor(r() * 4)], w: .6 + r() * 2.2, dash: r() < .35 }));
+  }
+  let ORB = orbits(seed);
+  function drawOrbit() {
+    const W = oc.width, H = oc.height, cx = W / 2, cy = H / 2, S = W;
+    og.fillStyle = th.paper; og.fillRect(0, 0, W, H);
+    og.save(); og.translate(cx, cy);
+    for (let k = 0; k < 90; k++) { og.strokeStyle = th.ink; og.globalAlpha = .05; og.lineWidth = 1; og.beginPath(); og.arc(0, 0, S * 0.012 * k * 0.55, 0, 7); og.stroke(); }
+    og.globalAlpha = 1;
+    for (const o of ORB) {
+      og.save(); og.rotate(o.tilt + spin * o.sp * 0.3);
+      og.strokeStyle = o.c; og.lineWidth = o.w * 2; og.setLineDash(o.dash ? [6, 10] : []);
+      og.beginPath(); og.ellipse(0, 0, S * o.rad, S * o.rad * o.ecc, 0, 0, Math.PI * 2); og.stroke(); og.setLineDash([]);
+      for (let j = 0; j < o.dots; j++) {
+        const a = (j / o.dots) * Math.PI * 2 + spin * o.sp;
+        const x = Math.cos(a) * S * o.rad, y = Math.sin(a) * S * o.rad * o.ecc;
+        og.fillStyle = j % 4 === 0 ? th.ink : o.c; og.beginPath(); og.arc(x, y, 3 + (j % 3) * 3, 0, 7); og.fill();
+      }
+      og.restore();
+    }
+    og.fillStyle = pal[0]; og.beginPath(); og.arc(0, 0, S * 0.055, 0, 7); og.fill();
+    og.fillStyle = th.paper; og.beginPath(); og.arc(S * 0.012, -S * 0.012, S * 0.018, 0, 7); og.fill();
+    og.restore();
+  }
+  function loop() { if (!drag) spin += vel; drawOrbit(); if (!reduce) requestAnimationFrame(loop); }
+  function reseed(s) { seed = s >>> 0; ORB = orbits(seed); document.getElementById('seedlabel').innerHTML = '<b>seed</b> ' + seed.toString(16); document.getElementById('stagetag').textContent = 'study no. ' + (seed % 997); }
+  oc.addEventListener('pointerdown', e => { drag = { x: e.clientX, s: spin, t: Date.now() }; oc.setPointerCapture(e.pointerId); });
+  oc.addEventListener('pointermove', e => { if (drag) spin = drag.s + (e.clientX - drag.x) * 0.01; });
+  oc.addEventListener('pointerup', e => { if (drag && Math.abs(e.clientX - drag.x) < 4 && Date.now() - drag.t < 300) reseed(Math.random() * 4294967296); drag = null; if (reduce) drawOrbit(); });
+  reseed(seed); loop(); if (reduce) drawOrbit();
+
+  // ---- works ----
+  function paint(c, s, kind) {
+    const g = c.getContext('2d'), w = c.width, h = c.height, r = rng(s);
+    const bg = pick([th.paper, '#fbfaf6', th.ink], r), dark = bg === th.ink;
+    g.fillStyle = bg; g.fillRect(0, 0, w, h);
+    const cols = dark ? [pal[0], pal[1], pal[2], th.paper] : pal;
+    const m = w * 0.08;
+    if (kind === 0) { // truchet arcs
+      const n = 6 + Math.floor(r() * 8), cs = (w - m * 2) / n, rows = Math.floor((h - m * 2) / cs);
+      g.lineWidth = cs * (0.12 + r() * 0.12); g.lineCap = 'round';
+      for (let i = 0; i < n; i++) for (let j = 0; j < rows; j++) {
+        const x = m + i * cs, y = m + j * cs; g.strokeStyle = cols[Math.floor(r() * 4)];
+        g.beginPath();
+        if (r() < .5) { g.arc(x, y, cs / 2, 0, Math.PI / 2); g.moveTo(x + cs, y + cs / 2); g.arc(x + cs, y + cs, cs / 2, -Math.PI / 2, -Math.PI, true); }
+        else { g.arc(x + cs, y, cs / 2, Math.PI / 2, Math.PI); g.moveTo(x + cs / 2, y + cs); g.arc(x, y + cs, cs / 2, -Math.PI / 2, 0); }
+        g.stroke();
+      }
+    } else if (kind === 1) { // concentric targets
+      const k = 2 + Math.floor(r() * 4);
+      for (let t = 0; t < k; t++) {
+        const x = m + r() * (w - 2 * m), y = m + r() * (h - 2 * m), R0 = w * (0.12 + r() * 0.3);
+        for (let q = R0; q > 4; q -= 6 + r() * 14) { g.fillStyle = cols[Math.floor(r() * 4)]; g.globalAlpha = .92; g.beginPath(); g.arc(x, y, q, 0, 7); g.fill(); }
+      }
+    } else if (kind === 2) { // halftone wave
+      const step = 10 + Math.floor(r() * 10), f = 0.004 + r() * 0.01, ph = r() * 6;
+      g.fillStyle = cols[Math.floor(r() * 3)];
+      for (let y = m; y < h - m; y += step) for (let x = m; x < w - m; x += step) {
+        const v = (Math.sin(x * f + ph) + Math.cos(y * f * 1.3 + ph * 2) + Math.sin((x + y) * f * .7)) / 3;
+        const rad = Math.max(0, (v + 1) / 2) * step * 0.55; g.beginPath(); g.arc(x, y, rad, 0, 7); g.fill();
+      }
+    } else if (kind === 3) { // stacked stripes
+      const n = 20 + Math.floor(r() * 50), amp = 6 + r() * 40, fr = .005 + r() * .02;
+      for (let i = 0; i < n; i++) {
+        const y0 = m + (i / n) * (h - 2 * m); g.strokeStyle = cols[i % 4]; g.lineWidth = 2 + r() * 3; g.beginPath();
+        for (let x = m; x <= w - m; x += 4) { const y = y0 + Math.sin(x * fr + i * .3) * amp * Math.sin(i / n * Math.PI); x === m ? g.moveTo(x, y) : g.lineTo(x, y); }
+        g.stroke();
+      }
+    } else { // bauhaus blocks
+      const n = 3 + Math.floor(r() * 3), cs = (w - 2 * m) / n, rows = Math.floor((h - 2 * m) / cs);
+      for (let i = 0; i < n; i++) for (let j = 0; j < rows; j++) {
+        const x = m + i * cs, y = m + j * cs, t = Math.floor(r() * 4);
+        g.fillStyle = cols[Math.floor(r() * 4)]; g.fillRect(x, y, cs, cs);
+        g.fillStyle = cols[Math.floor(r() * 4)]; g.beginPath();
+        if (t === 0) g.arc(x + cs / 2, y + cs / 2, cs * .38, 0, 7);
+        else if (t === 1) { g.moveTo(x, y + cs); g.lineTo(x + cs, y + cs); g.lineTo(x + cs, y); }
+        else if (t === 2) g.arc(x, y, cs, 0, Math.PI / 2);
+        else g.rect(x + cs * .25, y, cs * .5, cs);
+        g.fill();
+      }
+    }
+    g.globalAlpha = 1;
+    g.fillStyle = dark ? th.paper : th.ink; g.globalAlpha = .5; g.font = Math.round(w * 0.022) + 'px ui-sans-serif, sans-serif';
+    g.fillText(STUDIO.toUpperCase() + ' · ' + s.toString(16).slice(0, 6), m, h - m * 0.45); g.globalAlpha = 1;
+  }
+  const TECH = ['truchet', 'targets', 'halftone', 'contours', 'blocks'];
+  const TITLES = ['Harbour light', 'Second draft', 'Ledger', 'Morning shift', 'Folded map', 'Weekday', 'Signal', 'Paper moon', 'Rest', 'Margin note', 'Counterweight', 'Study for a wall', 'Tram 4', 'Low sun', 'Archive', 'The long table'];
+  const grid = document.getElementById('grid'), works = [], nW = 8 + Math.floor(R() * 5);
+  for (let i = 0; i < nW; i++) {
+    const s = Math.floor(R() * 4294967296), kind = Math.floor(R() * 5), year = 2018 + Math.floor(R() * 8);
+    const title = TITLES.splice(Math.floor(R() * TITLES.length), 1)[0], ed = 5 + Math.floor(R() * 45);
+    works.push({ s, kind, year, title, ed });
+    const fig = document.createElement('figure'); fig.className = 'work';
+    const c = document.createElement('canvas'); c.width = 450; c.height = 600; fig.appendChild(c);
+    const cap = document.createElement('div'); cap.className = 'cap'; cap.innerHTML = '<span></span><em class="sans"></em>';
+    cap.children[0].textContent = title; cap.children[1].textContent = TECH[kind] + ' · ' + year;
+    fig.appendChild(cap); grid.appendChild(fig);
+    fig.addEventListener('click', () => openLb(works[i]));
+    (window.requestIdleCallback || setTimeout)(() => paint(c, s, kind));
+  }
+  document.getElementById('count').textContent = nW + ' pieces · editions of 5–50';
+  const lb = document.getElementById('lb'), lbc = document.getElementById('lbc');
+  function openLb(wk) { paint(lbc, wk.s, wk.kind); document.getElementById('lbp').textContent = wk.title + ' — ' + TECH[wk.kind] + ', ' + wk.year + ' · edition of ' + wk.ed; lb.classList.add('on'); }
+  lb.addEventListener('click', () => lb.classList.remove('on'));
+  addEventListener('keydown', e => { if (e.key === 'Escape') lb.classList.remove('on'); });
+
+  // ---- notes ----
+  const NOTES = ['New pens arrived, the blue is almost violet', 'Edition of thirty signed and numbered', 'Rebuilt the plotter arm with a lighter carriage', 'Studio visit from a printmaking class', 'Testing cotton paper against the humidity', 'Poster for a small jazz festival is out', 'Wrote down the rule for the orbit studies', 'Framing day — the worst and best day', 'A gallery in the north asked for a wall piece', 'Archive scans finally sorted by year'];
+  const nl = document.getElementById('notelist'), now = Date.now();
+  for (let i = 0; i < 6; i++) {
+    const d = new Date(now - (i * 19 + Math.floor(R() * 15) + 2) * 86400000);
+    const li = document.createElement('li'); li.innerHTML = '<time class="sans"></time><span></span><small class="sans"></small>';
+    li.children[0].textContent = d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+    li.children[1].textContent = NOTES.splice(Math.floor(R() * NOTES.length), 1)[0];
+    li.children[2].textContent = pick(['print', 'studio', 'machine', 'show']);
+    nl.appendChild(li);
+  }
+
+  const tz = pick(['Europe/Brussels', 'Europe/Rome', 'Europe/Copenhagen', 'Europe/Warsaw', 'Europe/Amsterdam', 'Europe/Paris', 'Europe/Vienna', 'Europe/Stockholm', 'Europe/Madrid', 'Europe/Tallinn', 'Europe/Zurich', 'Europe/Prague']);
+  const clock = document.getElementById('clock');
+  const tick = () => { try { clock.textContent = city + ' · ' + new Date().toLocaleTimeString('en-GB', { timeZone: tz, hour: '2-digit', minute: '2-digit' }); } catch (e) { clock.textContent = city; } };
+  tick(); setInterval(tick, 15000);
+})();
+</script>
+</body>
+</html>

@@ -10,7 +10,7 @@ import (
 // OpenFirewallPort opens a port in ufw / firewalld if one of them is active.
 // It is best-effort: missing tools or a non-root process are silently ignored.
 func OpenFirewallPort(port int, proto string) {
-	if port <= 0 || port > 65535 || os.Geteuid() != 0 {
+	if port <= 0 || port > 65535 || proto == "none" || os.Geteuid() != 0 {
 		return
 	}
 	protos := []string{"tcp"}
@@ -40,6 +40,9 @@ func OpenFirewallPort(port int, proto string) {
 }
 
 func inboundFirewallProto(in *Inbound) string {
+	if in.Listen == "127.0.0.1" || in.Listen == "::1" || in.Listen == "localhost" {
+		return "none" // local-only inbound (e.g. behind the decoy site)
+	}
 	if in.Protocol == "hysteria2" {
 		return "udp"
 	}

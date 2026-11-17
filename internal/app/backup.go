@@ -335,6 +335,7 @@ func (a *App) restore(p string, online bool) error {
 			})
 		}
 	}
+	go func() { _ = a.StartFakeSite() }()
 	go func() {
 		time.Sleep(time.Second)
 		a.RequestPanelRestart()
