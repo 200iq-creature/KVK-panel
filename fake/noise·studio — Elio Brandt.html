@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<!-- saved from url=(0034)https://20a084g.nl5.h1clayd.click/ -->
+<html lang="en" style="--a: #f4f1de; --b: #e07a5f; --c: #9a8c98;"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>noise·studio — Elio Brandt</title>
+<meta name="description" content="Generative works, field studies and slow code.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=&#39;http://www.w3.org/2000/svg&#39; viewBox=&#39;0 0 32 32&#39;%3E%3Ccircle cx=&#39;16&#39; cy=&#39;16&#39; r=&#39;11&#39; fill=&#39;none&#39; stroke=&#39;%23e8e4da&#39; stroke-width=&#39;3&#39;/%3E%3Ccircle cx=&#39;16&#39; cy=&#39;16&#39; r=&#39;3&#39; fill=&#39;%23e8e4da&#39;/%3E%3C/svg%3E">
+<style>
+  :root { --bg:#0d0e11; --fg:#e8e4da; --mute:#8b877e; --line:rgba(232,228,218,.12); --a:#e07a5f; --b:#81b29a; --c:#f2cc8f; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  html { scroll-behavior:smooth; }
+  body { background:var(--bg); color:var(--fg); font:15px/1.6 ui-sans-serif,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; -webkit-font-smoothing:antialiased; overflow-x:hidden; }
+  a { color:inherit; }
+  #field { position:fixed; inset:0; width:100vw; height:100vh; display:block; z-index:0; }
+  .veil { position:fixed; inset:0; z-index:1; pointer-events:none;
+    background:radial-gradient(ellipse at 50% 40%, transparent 0, transparent 35%, rgba(13,14,17,.55) 80%, rgba(13,14,17,.9) 100%); }
+  header { position:fixed; top:0; left:0; right:0; z-index:5; display:flex; justify-content:space-between; align-items:center;
+    padding:22px clamp(16px,4vw,48px); mix-blend-mode:difference; }
+  .mark { font-weight:600; letter-spacing:.02em; text-decoration:none; display:flex; gap:10px; align-items:center; }
+  .mark i { width:10px; height:10px; border-radius:50%; background:var(--fg); display:inline-block; animation:pulse 3.2s ease-in-out infinite; }
+  @keyframes pulse { 50% { transform:scale(.55); opacity:.6; } }
+  nav a { margin-left:clamp(12px,2.4vw,28px); text-decoration:none; font-size:13px; letter-spacing:.08em; text-transform:uppercase; opacity:.8; }
+  nav a:hover { opacity:1; }
+  main { position:relative; z-index:2; }
+  .hero { min-height:100vh; display:flex; flex-direction:column; justify-content:flex-end; padding:0 clamp(16px,4vw,48px) 9vh; pointer-events:none; }
+  .hero h1 { font-size:clamp(44px,9vw,138px); line-height:.92; font-weight:500; letter-spacing:-.035em; max-width:12ch; }
+  .hero h1 em { font-style:normal; color:var(--c); }
+  .hero p { margin-top:22px; max-width:46ch; color:var(--mute); font-size:clamp(15px,1.4vw,18px); }
+  .hint { margin-top:28px; font-size:12px; letter-spacing:.14em; text-transform:uppercase; color:var(--mute); display:flex; gap:18px; flex-wrap:wrap; }
+  .hint b { color:var(--fg); font-weight:500; }
+  section { background:var(--bg); padding:clamp(56px,9vw,120px) clamp(16px,4vw,48px); border-top:1px solid var(--line); }
+  .label { font-size:12px; letter-spacing:.16em; text-transform:uppercase; color:var(--mute); margin-bottom:28px; display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(min(100%,260px),1fr)); gap:clamp(14px,2vw,24px); }
+  figure { cursor:pointer; }
+  figure canvas { width:100%; aspect-ratio:4/5; display:block; background:#15161a; border-radius:3px; transition:transform .5s cubic-bezier(.2,.7,.2,1), filter .5s; }
+  figure:hover canvas { transform:translateY(-4px); filter:brightness(1.12); }
+  figcaption { display:flex; justify-content:space-between; font-size:13px; margin-top:10px; color:var(--mute); }
+  figcaption span:first-child { color:var(--fg); }
+  .about { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr)); gap:clamp(24px,5vw,72px); }
+  .about p.big { font-size:clamp(22px,2.6vw,34px); line-height:1.3; letter-spacing:-.01em; }
+  .about p + p { margin-top:14px; color:var(--mute); }
+  .log { list-style:none; border-top:1px solid var(--line); }
+  .log li { display:grid; grid-template-columns:110px 1fr auto; gap:16px; padding:16px 0; border-bottom:1px solid var(--line); font-size:14px; }
+  .log li span:first-child, .log li span:last-child { color:var(--mute); font-variant-numeric:tabular-nums; }
+  footer { position:relative; z-index:2; background:var(--bg); border-top:1px solid var(--line); padding:28px clamp(16px,4vw,48px);
+    display:flex; justify-content:space-between; flex-wrap:wrap; gap:12px; font-size:13px; color:var(--mute); }
+  .lightbox { position:fixed; inset:0; z-index:20; background:rgba(8,9,11,.94); display:none; align-items:center; justify-content:center; flex-direction:column; padding:16px; }
+  .lightbox.on { display:flex; }
+  .lightbox canvas { max-width:min(92vw,720px); max-height:78vh; width:auto; height:auto; border-radius:3px; }
+  .lightbox p { margin-top:16px; font-size:13px; color:var(--mute); text-align:center; }
+  @media (max-width:560px) { nav a:not(:last-child) { display:none; } .log li { grid-template-columns:1fr auto; } .log li span:first-child { display:none; } }
+  @media (prefers-reduced-motion: reduce) { .mark i { animation:none; } }
+</style>
+</head>
+<body>
+<canvas id="field" aria-hidden="true" width="2560" height="963"></canvas>
+<div class="veil"></div>
+<header>
+  <a class="mark" href="https://20a084g.nl5.h1clayd.click/#"><i></i><span id="studio">noise·studio</span></a>
+  <nav><a href="https://20a084g.nl5.h1clayd.click/#works">Works</a><a href="https://20a084g.nl5.h1clayd.click/#about">About</a><a href="https://20a084g.nl5.h1clayd.click/#log">Log</a></nav>
+</header>
+<main>
+  <div class="hero" style="pointer-events: auto;">
+    <h1 id="headline">Weather made of <em>arithmetic</em>.</h1>
+    <p id="lede">Particles following a noise field that nobody fully controls. Move the cursor to disturb it, click to plant a new attractor.</p>
+    <div class="hint"><span><b>move</b> disturb</span><span><b>click</b> attractor</span><span><b>space</b> new seed</span><span id="seedlabel"><b>seed</b> 8d767712</span></div>
+  </div>
+  <section id="works">
+    <div class="label"><span>Selected works</span><span id="count">9 pieces</span></div>
+    <div class="grid" id="grid"><figure><canvas width="480" height="600"></canvas><figcaption><span>After rain</span><span>contour, 2024</span></figcaption></figure><figure><canvas width="480" height="600"></canvas><figcaption><span>Field notes</span><span>packing, 2022</span></figcaption></figure><figure><canvas width="480" height="600"></canvas><figcaption><span>Mist over nothing</span><span>packing, 2024</span></figcaption></figure><figure><canvas width="480" height="600"></canvas><figcaption><span>Plot for a quiet room</span><span>packing, 2023</span></figcaption></figure><figure><canvas width="480" height="600"></canvas><figcaption><span>Inventory</span><span>packing, 2025</span></figcaption></figure><figure><canvas width="480" height="600"></canvas><figcaption><span>Low tide</span><span>packing, 2023</span></figcaption></figure><figure><canvas width="480" height="600"></canvas><figcaption><span>Echo chamber</span><span>flow study, 2022</span></figcaption></figure><figure><canvas width="480" height="600"></canvas><figcaption><span>Untitled (grey)</span><span>weave, 2022</span></figcaption></figure><figure><canvas width="480" height="600"></canvas><figcaption><span>Second attempt</span><span>flow study, 2025</span></figcaption></figure></div>
+  </section>
+  <section id="about">
+    <div class="label"><span>About</span></div>
+    <div class="about">
+      <p class="big" id="aboutbig">Elio Brandt writes small programs that draw, based in Porto. The work sits between plotting, weather and old textile patterns.</p>
+      <div>
+        <p id="about1">The studio started in 2020 as a notebook of sketches and slowly turned into a practice: flow fields, packing problems, erosion, and the occasional failed attempt at teaching a machine to hesitate.</p>
+        <p>Every image here is computed in your browser from a single number. Nothing is uploaded, nothing is stored; close the tab and the piece is gone unless you remember its seed.</p>
+        <p>Commissions for print and installation are open a few times a year.</p>
+      </div>
+    </div>
+  </section>
+  <section id="log">
+    <div class="label"><span>Studio log</span></div>
+    <ul class="log" id="loglist"><li><span>2026-10-30</span><span>Rewrote the noise function, everything looks calmer</span><span>code</span></li><li><span>2026-10-19</span><span>Moved the studio one floor up, better light</span><span>print</span></li><li><span>2026-09-24</span><span>Plotter pen dried mid-print, kept the result</span><span>talk</span></li><li><span>2026-08-21</span><span>Plotter pen dried mid-print, kept the result</span><span>talk</span></li><li><span>2026-08-09</span><span>Talk: why randomness needs a budget</span><span>code</span></li><li><span>2026-07-16</span><span>Workshop notes published</span><span>print</span></li></ul>
+  </section>
+</main>
+<footer><span id="copy">© 2026 Elio Brandt · noise·studio</span><span id="clock">Porto · 18:06:25</span></footer>
+<div class="lightbox" id="lb"><canvas id="lbc" width="1200" height="1500"></canvas><p id="lbp"></p></div>
+
+<script>
+(() => {
+  // ---- детерминированный генератор из имени хоста: у каждого поддомена своё лицо ----
+  const host = (location.hostname || 'studio.local').toLowerCase();
+  function hash(str) { let h = 1779033703 ^ str.length; for (let i = 0; i < str.length; i++) { h = Math.imul(h ^ str.charCodeAt(i), 3432918353); h = h << 13 | h >>> 19; } return () => { h = Math.imul(h ^ h >>> 16, 2246822507); h = Math.imul(h ^ h >>> 13, 3266489909); return (h ^= h >>> 16) >>> 0; }; }
+  function rng(seed) { let a = seed >>> 0; return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+  const base = hash(host)();
+  const R = rng(base);
+  const pick = (arr, r = R) => arr[Math.floor(r() * arr.length)];
+
+  const PALETTES = [
+    ['#e07a5f', '#81b29a', '#f2cc8f', '#3d405b'], ['#ff6b6b', '#feca57', '#48dbfb', '#1dd1a1'],
+    ['#f72585', '#7209b7', '#4cc9f0', '#f8f9fa'], ['#e9c46a', '#f4a261', '#e76f51', '#2a9d8f'],
+    ['#d8f3dc', '#95d5b2', '#52b788', '#fefae0'], ['#ffbe0b', '#fb5607', '#ff006e', '#8338ec'],
+    ['#caf0f8', '#90e0ef', '#00b4d8', '#f1faee'], ['#f4f1de', '#e07a5f', '#9a8c98', '#c9ada7'],
+  ];
+  const pal = pick(PALETTES);
+  document.documentElement.style.setProperty('--a', pal[0]);
+  document.documentElement.style.setProperty('--b', pal[1]);
+  document.documentElement.style.setProperty('--c', pal[2]);
+
+  const FIRST = ['Mira', 'Oren', 'Lise', 'Tomas', 'Anouk', 'Ivo', 'Nell', 'Kasper', 'Juno', 'Elio', 'Saga', 'Wren', 'Ada', 'Felix', 'Ines', 'Rune'];
+  const LAST = ['Halden', 'Voss', 'Lindqvist', 'Moreau', 'Kessler', 'Aalto', 'Brandt', 'Novak', 'Castell', 'Ferreira', 'Holm', 'Arden'];
+  const STUDIO = pick(['field', 'drift', 'noise', 'slow', 'quiet', 'tide', 'grain', 'loom']) + '·' + pick(['works', 'studio', 'lab', 'room', 'press']);
+  const person = pick(FIRST) + ' ' + pick(LAST);
+  const city = pick(['Tallinn', 'Lisbon', 'Rotterdam', 'Gdańsk', 'Tbilisi', 'Porto', 'Turku', 'Ljubljana', 'Bergen', 'Leipzig', 'Riga', 'Valencia']);
+  const HEAD = [
+    ['Slow code for', 'restless', 'fields.'], ['Weather made of', 'arithmetic', '.'], ['Drawings nobody', 'drew', 'twice.'],
+    ['Small systems,', 'large', 'patience.'], ['Noise, taught to', 'behave', '.'], ['Every pixel', 'votes', '.'],
+  ];
+  const hd = pick(HEAD);
+  document.title = STUDIO + ' — ' + person;
+  document.getElementById('studio').textContent = STUDIO;
+  document.getElementById('headline').innerHTML = hd[0] + ' <em>' + hd[1] + '</em>' + (hd[2] === '.' ? '.' : ' ' + hd[2]);
+  document.getElementById('aboutbig').textContent = person + ' writes small programs that draw, based in ' + city + '. The work sits between plotting, weather and old textile patterns.';
+  document.getElementById('about1').textContent = 'The studio started in ' + (2014 + Math.floor(R() * 8)) + ' as a notebook of sketches and slowly turned into a practice: flow fields, packing problems, erosion, and the occasional failed attempt at teaching a machine to hesitate.';
+  document.getElementById('copy').textContent = '© ' + new Date().getFullYear() + ' ' + person + ' · ' + STUDIO;
+
+  // ---- шум для поля потока ----
+  function makeNoise(seed) {
+    const r = rng(seed), p = new Uint8Array(512), perm = [...Array(256).keys()];
+    for (let i = 255; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [perm[i], perm[j]] = [perm[j], perm[i]]; }
+    for (let i = 0; i < 512; i++) p[i] = perm[i & 255];
+    const g = (h, x, y) => ((h & 1) ? -x : x) + ((h & 2) ? -y : y);
+    const f = t => t * t * t * (t * (t * 6 - 15) + 10);
+    return (x, y) => {
+      const X = Math.floor(x) & 255, Y = Math.floor(y) & 255; x -= Math.floor(x); y -= Math.floor(y);
+      const u = f(x), v = f(y), A = p[X] + Y, B = p[X + 1] + Y;
+      const l1 = g(p[A], x, y) + u * (g(p[B], x - 1, y) - g(p[A], x, y));
+      const l2 = g(p[A + 1], x, y - 1) + u * (g(p[B + 1], x - 1, y - 1) - g(p[A + 1], x, y - 1));
+      return l1 + v * (l2 - l1);
+    };
+  }
+
+  // ---- живое поле на фоне ----
+  const cv = document.getElementById('field'), ctx = cv.getContext('2d');
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let warm = false, W, H, DPR, parts = [], noise, seed = base, t = 0, mouse = { x: -1e4, y: -1e4, on: false }, attractors = [];
+  function resize() {
+    DPR = Math.min(window.devicePixelRatio || 1, 2); W = innerWidth; H = innerHeight;
+    cv.width = W * DPR; cv.height = H * DPR; ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    ctx.fillStyle = '#0d0e11'; ctx.fillRect(0, 0, W, H);
+  }
+  function reseed(s) {
+    seed = s >>> 0; noise = makeNoise(seed); attractors = [];
+    const r = rng(seed), n = Math.round(Math.min(2200, W * H / 520));
+    parts = Array.from({ length: n }, () => ({ x: r() * W, y: r() * H, c: pal[Math.floor(r() * 3)], s: .6 + r() * 1.4, life: r() * 400 }));
+    ctx.fillStyle = '#0d0e11'; ctx.fillRect(0, 0, W, H);
+    document.getElementById('seedlabel').innerHTML = '<b>seed</b> ' + seed.toString(16);
+  }
+  function frame() {
+    t += .0016;
+    ctx.fillStyle = 'rgba(13,14,17,0.012)'; ctx.fillRect(0, 0, W, H);
+    const sc = .0022;
+    for (const q of parts) {
+      let a = noise(q.x * sc, q.y * sc + t) * Math.PI * 3.2;
+      let vx = Math.cos(a) * q.s, vy = Math.sin(a) * q.s;
+      const dx = q.x - mouse.x, dy = q.y - mouse.y, d2 = dx * dx + dy * dy;
+      if (d2 < 22000) { const k = (22000 - d2) / 22000 * 2.4; vx += dy / 60 * k; vy -= dx / 60 * k; }
+      for (const at of attractors) { const ax = at.x - q.x, ay = at.y - q.y, ad = Math.hypot(ax, ay) + 30; vx += ax / ad * 0.9; vy += ay / ad * 0.9; }
+      const ox = q.x, oy = q.y; q.x += vx; q.y += vy; q.life--;
+      if (q.x < 0 || q.x > W || q.y < 0 || q.y > H || q.life < 0) { q.x = Math.random() * W; q.y = Math.random() * H; q.life = 200 + Math.random() * 400; continue; }
+      ctx.strokeStyle = q.c; ctx.globalAlpha = .75; ctx.lineWidth = 1.3;
+      ctx.beginPath(); ctx.moveTo(ox, oy); ctx.lineTo(q.x, q.y); ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+    for (const at of attractors) at.age++;
+    attractors = attractors.filter(a => a.age < 900);
+    if (!reduce && !warm) requestAnimationFrame(frame);
+  }
+  let rsT; addEventListener('resize', () => { clearTimeout(rsT); rsT = setTimeout(() => { resize(); reseed(seed); warm = true; for (let i = 0; i < 360; i++) frame(); warm = false; }, 150); });
+  addEventListener('pointermove', e => { mouse.x = e.clientX; mouse.y = e.clientY; });
+  addEventListener('pointerleave', () => { mouse.x = mouse.y = -1e4; });
+  cv.addEventListener('click', e => attractors.push({ x: e.clientX, y: e.clientY, age: 0 }));
+  document.addEventListener('click', e => { if (e.target.closest('.hero') || e.target === document.body) attractors.push({ x: e.clientX, y: e.clientY, age: 0 }); });
+  addEventListener('keydown', e => { if (e.code === 'Space' && !lb.classList.contains('on')) { e.preventDefault(); reseed(Math.random() * 4294967296); } if (e.key === 'Escape') lb.classList.remove('on'); });
+  document.querySelector('.hero').style.pointerEvents = 'auto';
+  resize(); reseed(seed); warm = true; for (let i = 0; i < 360; i++) frame(); warm = false; frame();
+
+  // ---- галерея: четыре «техники», каждая работа — из своего сида ----
+  function paint(c, s, kind) {
+    const g = c.getContext('2d'), w = c.width, h = c.height, r = rng(s), n = makeNoise(s);
+    g.fillStyle = pick(['#15161a', '#f4f1ea', '#101418', '#1b1a17'], r); g.fillRect(0, 0, w, h);
+    const light = g.fillStyle === '#f4f1ea';
+    const cols = pal.slice(0, 4).map(x => x);
+    if (kind === 0) { // flow lines
+      const sc = .0016 + r() * .002;
+      for (let i = 0; i < 1400; i++) {
+        let x = r() * w, y = r() * h; g.strokeStyle = cols[Math.floor(r() * 3)]; g.globalAlpha = .5; g.lineWidth = 1 + r() * 1.5; g.beginPath(); g.moveTo(x, y);
+        for (let k = 0; k < 60; k++) { const a = n(x * sc, y * sc) * Math.PI * 4; x += Math.cos(a) * 4; y += Math.sin(a) * 4; g.lineTo(x, y); }
+        g.stroke();
+      }
+    } else if (kind === 1) { // circle packing
+      const cs = [];
+      for (let i = 0; i < 4000 && cs.length < 420; i++) {
+        const x = r() * w, y = r() * h; let rad = 4 + r() * 90;
+        for (const q of cs) { const d = Math.hypot(q.x - x, q.y - y) - q.r - 3; if (d < rad) rad = d; }
+        if (rad > 3) cs.push({ x, y, r: rad });
+      }
+      for (const q of cs) { g.globalAlpha = .9; g.fillStyle = cols[Math.floor(r() * 4)]; g.beginPath(); g.arc(q.x, q.y, q.r, 0, 7); g.fill();
+        if (r() < .5) { g.fillStyle = light ? '#f4f1ea' : '#15161a'; g.beginPath(); g.arc(q.x, q.y, q.r * (.3 + r() * .4), 0, 7); g.fill(); } }
+    } else if (kind === 2) { // contour / topography
+      g.lineWidth = 1.4; const sc = .003 + r() * .002;
+      for (let lvl = -1; lvl <= 1; lvl += .08) {
+        g.strokeStyle = cols[Math.floor((lvl + 1) * 1.5) % 4]; g.globalAlpha = .8; g.beginPath();
+        for (let y = 0; y < h; y += 6) for (let x = 0; x < w; x += 6) { const v = n(x * sc, y * sc) + n(x * sc * 3, y * sc * 3) * .3; if (Math.abs(v - lvl) < .012) g.rect(x, y, 2, 2); }
+        g.stroke();
+      }
+    } else { // woven stripes
+      const bands = 18 + Math.floor(r() * 30), bw = w / bands;
+      for (let i = 0; i < bands; i++) for (let j = 0; j < bands * 1.25; j++) {
+        const v = n(i * .18, j * .18); g.globalAlpha = 1; g.fillStyle = cols[(i + j + (v > 0 ? 1 : 0)) % 4];
+        if ((i + j) % 2) g.fillRect(i * bw + 2, j * bw, bw - 4, bw + 1); else g.fillRect(i * bw, j * bw + 2, bw + 1, bw - 4);
+      }
+    }
+    g.globalAlpha = 1;
+  }
+  const TECH = ['flow study', 'packing', 'contour', 'weave'];
+  const TITLES = ['Low tide', 'Salt map', 'Second attempt', 'Harbour', 'Inventory', 'Mist over nothing', 'Plot for a quiet room', 'Untitled (grey)', 'North window', 'Loose thread', 'Erosion no. ', 'Field notes', 'After rain', 'Graphite weather', 'Small census', 'Echo chamber'];
+  const grid = document.getElementById('grid'), works = [];
+  const nW = 9 + Math.floor(R() * 4);
+  for (let i = 0; i < nW; i++) {
+    const s = Math.floor(R() * 4294967296), kind = Math.floor(R() * 4), year = 2019 + Math.floor(R() * 7);
+    let title = TITLES.splice(Math.floor(R() * TITLES.length), 1)[0]; if (title.endsWith('no. ')) title += 2 + Math.floor(R() * 40);
+    works.push({ s, kind, year, title });
+    const fig = document.createElement('figure'), c = document.createElement('canvas'); c.width = 480; c.height = 600;
+    fig.appendChild(c);
+    const cap = document.createElement('figcaption'); cap.innerHTML = '<span></span><span></span>';
+    cap.children[0].textContent = title; cap.children[1].textContent = TECH[kind] + ', ' + year;
+    fig.appendChild(cap); grid.appendChild(fig);
+    fig.addEventListener('click', () => openLb(works[i]));
+    (window.requestIdleCallback || setTimeout)(() => paint(c, s, kind));
+  }
+  document.getElementById('count').textContent = nW + ' pieces';
+
+  const lb = document.getElementById('lb'), lbc = document.getElementById('lbc');
+  function openLb(wk) { paint(lbc, wk.s, wk.kind); document.getElementById('lbp').textContent = wk.title + ' — ' + TECH[wk.kind] + ', ' + wk.year + ' · seed ' + wk.s.toString(16) + ' · click to close'; lb.classList.add('on'); }
+  lb.addEventListener('click', () => lb.classList.remove('on'));
+
+  // ---- журнал студии ----
+  const LOG = ['Plotter pen dried mid-print, kept the result', 'New series: packing problems on recycled paper', 'Rewrote the noise function, everything looks calmer', 'Workshop notes published', 'Print edition sold out', 'Tried to simulate fog, got wool instead', 'Moved the studio one floor up, better light', 'Talk: why randomness needs a budget'];
+  const ll = document.getElementById('loglist'), now = Date.now();
+  for (let i = 0; i < 6; i++) {
+    const d = new Date(now - (i * 23 + Math.floor(R() * 20) + 3) * 86400000);
+    const li = document.createElement('li'); li.innerHTML = '<span></span><span></span><span></span>';
+    li.children[0].textContent = d.toISOString().slice(0, 10); li.children[1].textContent = pick(LOG); li.children[2].textContent = pick(['note', 'print', 'code', 'talk']);
+    ll.appendChild(li);
+  }
+
+  // ---- локальное время «студии» ----
+  const tz = pick(['Europe/Tallinn', 'Europe/Lisbon', 'Europe/Amsterdam', 'Europe/Warsaw', 'Europe/Berlin', 'Europe/Helsinki', 'Europe/Riga', 'Europe/Madrid']);
+  const clock = document.getElementById('clock');
+  const tick = () => { try { clock.textContent = city + ' · ' + new Date().toLocaleTimeString('en-GB', { timeZone: tz, hour: '2-digit', minute: '2-digit', second: '2-digit' }); } catch { clock.textContent = city; } };
+  tick(); setInterval(tick, 1000);
+})();
+</script>
+
+
+</body></html>
