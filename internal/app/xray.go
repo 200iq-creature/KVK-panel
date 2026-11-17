@@ -142,6 +142,8 @@ func lastMeaningful(out string) string {
 
 // Apply builds config, tests it and restarts xray.
 func (x *XrayManager) Apply() error {
+	x.app.prepareEmbedded()
+	defer x.app.syncEmbeddedLogged()
 	cfg, err := x.app.BuildXrayConfig()
 	if err != nil {
 		return err

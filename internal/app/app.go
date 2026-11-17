@@ -12,7 +12,12 @@ import (
 	"time"
 )
 
-var Version = "1.0.0"
+// Version is set at build time from the VERSION file (-ldflags -X); keep the
+// default in sync with VERSION for plain `go build`.
+var Version = "1.0.1"
+
+// Branch is the git branch the binary was built from (-ldflags -X).
+var Branch = "main"
 
 const RepoSlug = "200iq-creature/KVK-panel"
 
@@ -36,6 +41,8 @@ type App struct {
 		lastStatsAt time.Time
 		statsErr    string
 	}
+
+	emb embState
 
 	applyMu      sync.Mutex
 	applyPending bool
@@ -88,7 +95,10 @@ func (a *App) Run() error {
 		}
 	} else {
 		log.Printf("xray binary not found in %s", a.BinDir)
+		a.prepareEmbedded()
+		a.syncEmbeddedLogged()
 	}
+	go a.migrateAutoSetup()
 	if err := a.StartFakeSite(); err != nil {
 		log.Printf("fake site: %v", err)
 	}
@@ -110,6 +120,7 @@ func (a *App) Run() error {
 		case <-a.ctx.Done():
 			srv.shutdown()
 			a.Xray.Stop()
+			a.stopEmbedded()
 			a.StopFakeSite()
 			mtg.stop()
 			a.Store.Flush()

@@ -53,6 +53,9 @@ func Main(args []string) int {
 	case "version", "-v", "--version":
 		fmt.Println(Version)
 		return 0
+	case "branch":
+		fmt.Println(Branch)
+		return 0
 	case "help", "-h", "--help":
 		printHelp()
 		return 0
@@ -250,7 +253,7 @@ func (a *App) printInfo(asJSON bool) {
 		}
 		return d0.Settings.PanelPort
 	}(), scheme) + "/" + d0.Settings.SubPath + "/<id>")
-	fmt.Println("Версия:        " + Version)
+	fmt.Println("Версия:        " + Version + " (ветка " + Branch + ")")
 }
 
 func runServer(dataDir, binDir string) int {

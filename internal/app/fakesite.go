@@ -207,12 +207,18 @@ func loadCached(name, cf, kf string) *tls.Certificate {
 func (a *App) fakeHandler(plain bool) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var st FakeSiteSettings
-		var cdnPort int
+		var cdnPort, wsPort int
 		a.Store.Read(func(d *Data) {
 			st = d.Settings.Fake
 			for _, in := range d.Inbounds {
-				if in.Auto == "cdn" && in.Enabled {
+				if !in.Enabled {
+					continue
+				}
+				switch in.Auto {
+				case "cdn":
 					cdnPort = in.Port
+				case "cdnws":
+					wsPort = in.Port
 				}
 			}
 		})
@@ -221,8 +227,12 @@ func (a *App) fakeHandler(plain bool) http.Handler {
 			a.serveACMEChallenge(w, r)
 			return
 		}
-		if st.CDN && cdnPort > 0 && st.XHTTPPath != "" && (p == st.XHTTPPath || strings.HasPrefix(p, strings.TrimSuffix(st.XHTTPPath, "/")+"/")) {
+		if st.CDN && cdnPort > 0 && pathUnder(p, st.XHTTPPath) {
 			xhttpProxy(cdnPort).ServeHTTP(w, r)
+			return
+		}
+		if st.CDN && wsPort > 0 && pathUnder(p, st.WSPath) {
+			xhttpProxy(wsPort).ServeHTTP(w, r) // ReverseProxy passes the WebSocket upgrade through
 			return
 		}
 		if plain {
@@ -291,16 +301,19 @@ func serveFakePage(w http.ResponseWriter, r *http.Request, custom string) {
 
 var (
 	proxyMu    sync.Mutex
-	proxyPort  int
-	proxyCache *httputil.ReverseProxy
+	proxyCache = map[int]*httputil.ReverseProxy{}
 )
+
+func pathUnder(p, base string) bool {
+	return base != "" && (p == base || strings.HasPrefix(p, strings.TrimSuffix(base, "/")+"/"))
+}
 
 // xhttpProxy streams XHTTP requests to the local Xray inbound.
 func xhttpProxy(port int) *httputil.ReverseProxy {
 	proxyMu.Lock()
 	defer proxyMu.Unlock()
-	if proxyCache != nil && proxyPort == port {
-		return proxyCache
+	if p := proxyCache[port]; p != nil {
+		return p
 	}
 	target, _ := url.Parse("http://127.0.0.1:" + strconv.Itoa(port))
 	tr := &http.Transport{
@@ -310,7 +323,7 @@ func xhttpProxy(port int) *httputil.ReverseProxy {
 		IdleConnTimeout:     90 * time.Second,
 		DisableCompression:  true,
 	}
-	proxyCache = &httputil.ReverseProxy{
+	rp := &httputil.ReverseProxy{
 		Rewrite: func(pr *httputil.ProxyRequest) {
 			pr.SetURL(target)
 			pr.Out.Host = pr.In.Host
@@ -329,6 +342,6 @@ func xhttpProxy(port int) *httputil.ReverseProxy {
 			http.Error(w, "502 Bad Gateway", http.StatusBadGateway)
 		},
 	}
-	proxyPort = port
-	return proxyCache
+	proxyCache[port] = rp
+	return rp
 }

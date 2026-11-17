@@ -35,11 +35,12 @@
       <section class="col" style="gap:8px">
         <b class="strong">Конфиги · {{ links.length }}</b>
         <div class="list-rows">
-          <div v-for="l in links" :key="l.link" class="lr" style="flex-wrap:wrap">
-            <span class="lr-t"><b>{{ l.inbound || l.name }}</b><small>{{ l.node }} · {{ PROTO[l.protocol] || l.protocol }} · {{ NET[l.network] || l.network }} · {{ SEC[l.security] || l.security }}</small></span>
-            <button class="i-cp" type="button" title="Скопировать" @click="copy(l.link)"><Icon n="copy" /></button>
-            <button class="i-cp" type="button" title="QR-код" @click="qr = qr === l.link ? '' : l.link"><Icon n="qr" /></button>
-            <div v-if="qr === l.link" class="qr-wrap" style="width:100%"><Qr :text="l.link" :size="240" /></div>
+          <div v-for="(l, k) in links" :key="k + (l.link || l.name)" class="lr" style="flex-wrap:wrap">
+            <span class="lr-t"><b>{{ l.inbound || l.name }}</b><small>{{ l.node }} · {{ PROTO[l.protocol] || l.protocol }} · {{ NET[l.network] || l.network }} · {{ SEC[l.security] || l.security }}<template v-if="l.configType === 'xray-json'"> · только JSON (Xray 26+)</template></small></span>
+            <button v-if="l.config" class="i-cp" type="button" :title="l.configType === 'awg' ? 'Скачать .conf' : 'Скачать JSON'" @click="dl(l)"><Icon n="download" /></button>
+            <button class="i-cp" type="button" title="Скопировать" @click="copy(l.link || l.config)"><Icon n="copy" /></button>
+            <button v-if="l.link || l.configType === 'awg'" class="i-cp" type="button" title="QR-код" @click="qr = qr === k ? '' : k"><Icon n="qr" /></button>
+            <div v-if="qr === k" class="qr-wrap" style="width:100%"><Qr :text="l.link || l.config" :size="260" /><span v-if="l.configType === 'awg'" class="hint">Отсканируйте в AmneziaVPN или AmneziaWG</span></div>
           </div>
           <p v-if="!links.length" class="hint">У клиента нет подключений — добавьте инбаунды в «Изменить».</p>
         </div>
@@ -89,6 +90,14 @@ const p = defineProps({ id: String, inbounds: Array, allTags: Array })
 const emit = defineEmits(['close', 'changed'])
 const c = ref(null)
 const links = ref([])
+function dl(l) {
+  const name = ((c.value?.name || '') + '-' + (l.inbound || l.protocol)).replace(/[^a-zA-Z0-9_=+.-]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 15) || 'config'
+  const a = document.createElement('a')
+  a.href = URL.createObjectURL(new Blob([l.config], { type: 'text/plain' }))
+  a.download = name + (l.configType === 'awg' ? '.conf' : '.json')
+  document.body.appendChild(a); a.click(); a.remove()
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000)
+}
 const error = ref('')
 const mode = ref('view')
 const qr = ref('')

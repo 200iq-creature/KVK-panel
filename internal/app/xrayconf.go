@@ -98,11 +98,31 @@ func (a *App) buildConfigFrom(d *Data, filterOverride *FilterSettings, testMode 
 	}
 
 	if !testMode {
+		bridge := []any{}
+		inBridge := map[string]bool{}
 		for _, in := range d.Inbounds {
 			if !in.Enabled {
 				continue
 			}
+			if isEmbeddedProto(in.Protocol) {
+				// served by the panel; traffic enters xray through the bridge
+				for _, c := range activeByInbound[in.ID] {
+					if !inBridge[c.Name] {
+						inBridge[c.Name] = true
+						bridge = append(bridge, M{"id": c.UUID, "email": c.Name, "level": 0})
+					}
+				}
+				continue
+			}
 			inbounds = append(inbounds, a.buildInbound(d, in, activeByInbound[in.ID], dnsFilter))
+		}
+		if st.BridgePort > 0 && a.hasEmbedded(d) {
+			inbounds = append(inbounds, M{
+				"tag": bridgeTag, "listen": "127.0.0.1", "port": st.BridgePort, "protocol": "vless",
+				"settings":       M{"clients": bridge, "decryption": "none"},
+				"streamSettings": M{"network": "tcp", "security": "none"},
+				"sniffing":       M{"enabled": true, "destOverride": []string{"http", "tls", "quic"}, "routeOnly": !dnsFilter},
+			})
 		}
 		if sx := a.socksInbound(d); sx != nil {
 			inbounds = append(inbounds, sx)
@@ -361,6 +381,26 @@ func (a *App) buildInbound(d *Data, in *Inbound, clients []*Client, dnsFilter bo
 			list = append(list, M{"auth": c.Password, "email": c.Name, "level": 0})
 		}
 		ib["settings"] = M{"version": 2, "clients": list}
+	case "masque":
+		seen := map[string]bool{}
+		for _, c := range clients {
+			// xray: login is the email; no ':' and unique case-insensitively
+			k := strings.ToLower(c.Name)
+			if strings.Contains(c.Name, ":") || seen[k] || c.Password == "" {
+				continue
+			}
+			seen[k] = true
+			list = append(list, M{"pass": c.Password, "email": c.Name, "level": 0})
+		}
+		pool := in.MasquePool
+		if len(pool) == 0 {
+			pool = defaultMasquePool
+		}
+		set := M{"clients": list, "address": pool}
+		if in.MTU > 0 {
+			set["mtu"] = in.MTU
+		}
+		ib["settings"] = set
 	}
 
 	ss := M{}
@@ -371,6 +411,10 @@ func (a *App) buildInbound(d *Data, in *Inbound, clients []*Client, dnsFilter bo
 		if in.ObfsPassword != "" {
 			ss["finalmask"] = M{"udp": []any{M{"type": "salamander", "settings": M{"password": in.ObfsPassword}}}}
 		}
+	}
+	if in.Protocol == "masque" {
+		network = "masque"
+		ss["masqueSettings"] = M{"path": orDefault(in.Path, masqueDefaultPath)}
 	}
 	if network == "" {
 		network = "tcp"
@@ -391,7 +435,7 @@ func (a *App) buildInbound(d *Data, in *Inbound, clients []*Client, dnsFilter bo
 		ss["httpupgradeSettings"] = M{"path": orDefault(in.Path, "/"), "host": in.Host}
 	}
 	security := in.Security
-	if in.Protocol == "hysteria2" {
+	if alwaysTLS(in.Protocol) {
 		security = "tls"
 	}
 	switch security {
@@ -416,6 +460,9 @@ func (a *App) buildInbound(d *Data, in *Inbound, clients []*Client, dnsFilter bo
 		alpn := in.ALPN
 		if in.Protocol == "hysteria2" {
 			alpn = []string{"h3"}
+		}
+		if in.Protocol == "masque" {
+			alpn = masqueALPN(in.ALPN)
 		}
 		if len(alpn) > 0 {
 			tls["alpn"] = alpn

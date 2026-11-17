@@ -1,11 +1,14 @@
 package app
 
 import (
+	"bufio"
 	"context"
 	"crypto/tls"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"net/http"
 	"sort"
@@ -525,6 +528,9 @@ func (a *App) runAutoSetup(req autoReq) {
 		if f.XHTTPPath == "" {
 			f.XHTTPPath = "/" + strings.ToLower(RandomString(4)) + "/" + strings.ToLower(RandomString(12))
 		}
+		if f.WSPath == "" || f.WSPath == f.XHTTPPath {
+			f.WSPath = "/" + strings.ToLower(RandomString(5)) + "/" + strings.ToLower(RandomString(11))
+		}
 		f.Enabled, f.Domains, f.SNI, f.CDNDomains, f.Port, f.CDN = true, names, req.SNI, cdnHosts, req.Port, req.CDN
 		if req.Email != "" {
 			f.Email = req.Email
@@ -645,16 +651,19 @@ func randomLocalPort(d *Data) int {
 // autoInbounds creates or updates the two auto inbounds, grants them and applies Xray.
 func (a *App) autoInbounds(req autoReq, names, cdnHosts []string, fs FakeSiteSettings) (realityID, cdnID, clientName string, err error) {
 	var snapIn, snapCl []byte
+	ip := a.autoServerIP()
 	err = a.Store.Update(func(d *Data) error {
 		snapIn, _ = json.Marshal(d.Inbounds)
 		snapCl, _ = json.Marshal(d.Clients)
-		var reality, cdn *Inbound
+		var reality, cdn, cdnws *Inbound
 		for _, in := range d.Inbounds {
 			switch in.Auto {
 			case "reality":
 				reality = in
 			case "cdn":
 				cdn = in
+			case "cdnws":
+				cdnws = in
 			}
 		}
 		// Reality
@@ -670,7 +679,8 @@ func (a *App) autoInbounds(req autoReq, names, cdnHosts []string, fs FakeSiteSet
 		reality.Fingerprint = "chrome"
 		reality.SpiderX = "/"
 		reality.Flow = "xtls-rprx-vision"
-		reality.ExternalHost, reality.ExternalPort = "", 0
+		// Reality must reach the server directly: never a domain that may be behind the Cloudflare proxy
+		reality.ExternalHost, reality.ExternalPort = ip, 0
 		if isNew {
 			reality.Tag = ""
 		}
@@ -681,56 +691,31 @@ func (a *App) autoInbounds(req autoReq, names, cdnHosts []string, fs FakeSiteSet
 			d.Inbounds = append([]*Inbound{reality}, d.Inbounds...)
 		}
 		realityID = reality.ID
-		// CDN (XHTTP behind the decoy site)
+		// CDN: XHTTP (Xray clients) + WebSocket (sing-box, Clash, NekoBox…) behind the decoy site
+		var wsID string
 		if req.CDN {
-			isNewC := cdn == nil
-			if isNewC {
-				cdn = &Inbound{ID: RandomHex(6), CreatedAt: nowMs(), Sniffing: true, Auto: "cdn", Remark: autoRemark(d, "CDN")}
-				cdn.Port = randomLocalPort(d)
-				if cdn.Port == 0 {
-					return fmt.Errorf("не нашлось свободного локального порта")
-				}
-			}
-			cdn.Enabled = true
-			cdn.Protocol, cdn.Network, cdn.Security = "vless", "xhttp", "none"
-			cdn.Listen = "127.0.0.1"
-			cdn.Path = fs.XHTTPPath
-			cdn.XHTTPMode = "auto"
-			cdn.Host = ""
-			cdn.Front, cdn.FrontHosts = "fake", append([]string{}, cdnHosts...)
-			cdn.ExternalHost, cdn.ExternalPort = "", 0
-			if isNewC {
-				cdn.Tag = ""
-			}
-			if err := a.normalizeInbound(d, cdn, isNewC); err != nil {
+			x, err := a.upsertFront(d, cdn, "cdn", "CDN", "xhttp", fs.XHTTPPath, cdnHosts, realityID)
+			if err != nil {
 				return err
 			}
-			cdn.Path = fs.XHTTPPath
-			if isNewC {
-				// keep it right after Reality
-				idx := 0
-				for i, in := range d.Inbounds {
-					if in.ID == reality.ID {
-						idx = i + 1
-					}
-				}
-				d.Inbounds = append(d.Inbounds[:idx], append([]*Inbound{cdn}, d.Inbounds[idx:]...)...)
+			cdnID = x.ID
+			w, err := a.upsertFront(d, cdnws, "cdnws", "CDN WS", "ws", fs.WSPath, cdnHosts, cdnID)
+			if err != nil {
+				return err
 			}
-			cdnID = cdn.ID
-		} else if cdn != nil {
-			for i, in := range d.Inbounds {
-				if in.ID == cdn.ID {
-					d.Inbounds = append(d.Inbounds[:i], d.Inbounds[i+1:]...)
-					break
+			wsID = w.ID
+		} else {
+			for _, old := range []*Inbound{cdn, cdnws} {
+				if old != nil {
+					dropInbound(d, old.ID)
 				}
-			}
-			for _, c := range d.Clients {
-				c.Inbounds = removeStr(c.Inbounds, cdn.ID)
 			}
 		}
 		ids := []string{realityID}
-		if cdnID != "" {
-			ids = append(ids, cdnID)
+		for _, id := range []string{cdnID, wsID} {
+			if id != "" {
+				ids = append(ids, id)
+			}
 		}
 		if req.GrantAll {
 			for _, c := range d.Clients {
@@ -774,6 +759,131 @@ func (a *App) autoInbounds(req autoReq, names, cdnHosts []string, fs FakeSiteSet
 		return "", "", "", fmt.Errorf("Xray не принял конфигурацию — изменения отменены: %v", aerr)
 	}
 	return realityID, cdnID, clientName, nil
+}
+
+// migrateAutoSetup upgrades setups made by older versions: Reality links must
+// carry the server IP, and the WebSocket CDN entry for sing-box/Clash clients
+// must exist next to XHTTP.
+func (a *App) migrateAutoSetup() {
+	var need, needWS bool
+	a.Store.Read(func(d *Data) {
+		if !d.Settings.Fake.Enabled {
+			return
+		}
+		hasCDN, hasWS := false, false
+		for _, in := range d.Inbounds {
+			switch in.Auto {
+			case "reality":
+				if in.ExternalHost == "" || net.ParseIP(in.ExternalHost) == nil {
+					need = true
+				}
+			case "cdn":
+				hasCDN = true
+			case "cdnws":
+				hasWS = true
+			}
+		}
+		needWS = d.Settings.Fake.CDN && hasCDN && !hasWS
+	})
+	if !need && !needWS {
+		return
+	}
+	ip := ""
+	if need {
+		if ip = a.autoServerIP(); ip == "" {
+			need = false
+		}
+	}
+	changed := false
+	a.Store.Update(func(d *Data) error {
+		f := &d.Settings.Fake
+		var cdn, ws *Inbound
+		for _, in := range d.Inbounds {
+			switch in.Auto {
+			case "reality":
+				if need && in.ExternalHost != ip {
+					in.ExternalHost, changed = ip, true
+				}
+			case "cdn":
+				cdn = in
+			case "cdnws":
+				ws = in
+			}
+		}
+		if needWS && cdn != nil && ws == nil {
+			if f.WSPath == "" {
+				f.WSPath = "/" + strings.ToLower(RandomString(5)) + "/" + strings.ToLower(RandomString(11))
+			}
+			w, err := a.upsertFront(d, nil, "cdnws", "CDN WS", "ws", f.WSPath, cdn.FrontHosts, cdn.ID)
+			if err == nil {
+				for _, c := range d.Clients {
+					if c.HasInbound(cdn.ID) && !c.HasInbound(w.ID) {
+						c.Inbounds = append(c.Inbounds, w.ID)
+					}
+				}
+				changed = true
+			}
+		}
+		return nil
+	})
+	if changed {
+		if a.Xray.Installed() {
+			if err := a.Xray.Apply(); err != nil {
+				log.Printf("autosetup migrate: %v", err)
+			}
+		}
+		go a.SyncNodes()
+	}
+}
+
+// upsertFront creates or updates a local inbound hidden behind the decoy site.
+func (a *App) upsertFront(d *Data, in *Inbound, auto, remark, network, path string, hosts []string, afterID string) (*Inbound, error) {
+	isNew := in == nil
+	if isNew {
+		in = &Inbound{ID: RandomHex(6), CreatedAt: nowMs(), Sniffing: true, Auto: auto, Remark: autoRemark(d, remark)}
+		in.Port = randomLocalPort(d)
+		if in.Port == 0 {
+			return nil, fmt.Errorf("не нашлось свободного локального порта")
+		}
+	}
+	in.Enabled = true
+	in.Protocol, in.Network, in.Security = "vless", network, "none"
+	in.Listen = "127.0.0.1"
+	in.Path, in.Host = path, ""
+	if network == "xhttp" {
+		in.XHTTPMode = "auto"
+	}
+	in.Front, in.FrontHosts = "fake", append([]string{}, hosts...)
+	in.ExternalHost, in.ExternalPort = "", 0
+	if isNew {
+		in.Tag = ""
+	}
+	if err := a.normalizeInbound(d, in, isNew); err != nil {
+		return nil, err
+	}
+	in.Path = path
+	if isNew {
+		idx := 0
+		for i, x := range d.Inbounds {
+			if x.ID == afterID {
+				idx = i + 1
+			}
+		}
+		d.Inbounds = append(d.Inbounds[:idx], append([]*Inbound{in}, d.Inbounds[idx:]...)...)
+	}
+	return in, nil
+}
+
+func dropInbound(d *Data, id string) {
+	for i, in := range d.Inbounds {
+		if in.ID == id {
+			d.Inbounds = append(d.Inbounds[:i], d.Inbounds[i+1:]...)
+			break
+		}
+	}
+	for _, c := range d.Clients {
+		c.Inbounds = removeStr(c.Inbounds, id)
+	}
 }
 
 // autoCerts makes sure every decoy domain has a Let's Encrypt certificate.
@@ -820,12 +930,15 @@ func (a *App) autoCerts(names []string, email string) ([]string, int) {
 // autoSelfCheck connects to the public Reality port like a browser would.
 func (a *App) autoSelfCheck() ([]string, bool) {
 	var st FakeSiteSettings
-	var cdnPort int
+	var cdnPort, wsPort int
 	a.Store.Read(func(d *Data) {
 		st = d.Settings.Fake
 		for _, in := range d.Inbounds {
 			if in.Auto == "cdn" && in.Enabled {
 				cdnPort = in.Port
+			}
+			if in.Auto == "cdnws" && in.Enabled {
+				wsPort = in.Port
 			}
 		}
 	})
@@ -859,7 +972,38 @@ func (a *App) autoSelfCheck() ([]string, bool) {
 			out = append(out, "XHTTP за сайтом готов")
 		}
 	}
+	if st.CDN && wsPort > 0 && len(st.CDNDomains) > 0 {
+		// full path: Reality port → fallback to the site → WebSocket upgrade to Xray
+		if code, _, err := fakeProbeWS("127.0.0.1:"+strconv.Itoa(st.Port), st.CDNDomains[0], st.WSPath); err != nil || code != 101 {
+			bad = true
+			if err == nil {
+				err = fmt.Errorf("ответ %d вместо 101", code)
+			}
+			out = append(out, "WebSocket за сайтом не отвечает: "+err.Error())
+		} else {
+			out = append(out, "WebSocket за сайтом готов")
+		}
+	}
 	return out, bad
+}
+
+// fakeProbeWS sends a WebSocket upgrade through the public port.
+func fakeProbeWS(addr, sni, path string) (int, string, error) {
+	dialer := &net.Dialer{Timeout: 5 * time.Second}
+	conn, err := tls.DialWithDialer(dialer, "tcp", addr, &tls.Config{ServerName: sni, InsecureSkipVerify: true, NextProtos: []string{"http/1.1"}})
+	if err != nil {
+		return 0, "", err
+	}
+	defer conn.Close()
+	_ = conn.SetDeadline(time.Now().Add(6 * time.Second))
+	key := base64.StdEncoding.EncodeToString([]byte(RandomString(16)))
+	fmt.Fprintf(conn, "GET %s HTTP/1.1\r\nHost: %s\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: %s\r\nSec-WebSocket-Version: 13\r\nUser-Agent: Mozilla/5.0\r\n\r\n", path, sni, key)
+	resp, err := http.ReadResponse(bufio.NewReader(conn), nil)
+	if err != nil {
+		return 0, "", err
+	}
+	resp.Body.Close()
+	return resp.StatusCode, "", nil
 }
 
 // fakeProbe performs an HTTPS request with the given SNI and returns the

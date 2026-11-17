@@ -78,8 +78,8 @@ func validName(n string) error {
 	if n == "" || len([]rune(n)) > 64 {
 		return errf(400, "Имя клиента: от 1 до 64 символов")
 	}
-	if strings.ContainsAny(n, "<>\"'`\\\n\r\t") {
-		return errf(400, "Имя клиента не должно содержать символы < > \" ' ` \\")
+	if strings.ContainsAny(n, "<>\"'`\\\n\r\t:") {
+		return errf(400, "Имя клиента не должно содержать символы < > \" ' ` \\ :")
 	}
 	return nil
 }

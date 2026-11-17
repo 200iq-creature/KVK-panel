@@ -83,7 +83,7 @@ export function fromLocalInput(s) { return s ? new Date(s).getTime() : 0 }
 export const flag = (cc) => cc && cc.length === 2 ? String.fromCodePoint(...[...cc.toUpperCase()].map(c => 127397 + c.charCodeAt(0))) : ''
 
 export const PROTO = {
-  vless: 'VLESS', vmess: 'VMess', trojan: 'Trojan', shadowsocks: 'Shadowsocks', hysteria2: 'Hysteria2', socks: 'SOCKS5', http: 'HTTP',
+  vless: 'VLESS', vmess: 'VMess', trojan: 'Trojan', shadowsocks: 'Shadowsocks', hysteria2: 'Hysteria2', tuic: 'TUIC', amneziawg: 'AmneziaWG', masque: 'MASQUE', socks: 'SOCKS5', http: 'HTTP',
 }
-export const NET = { tcp: 'TCP', ws: 'WebSocket', grpc: 'gRPC', xhttp: 'XHTTP', httpupgrade: 'HTTPUpgrade', hysteria: 'QUIC', '': 'TCP' }
-export const SEC = { none: 'без защиты', tls: 'TLS', reality: 'Reality' }
+export const NET = { tcp: 'TCP', ws: 'WebSocket', grpc: 'gRPC', xhttp: 'XHTTP', httpupgrade: 'HTTPUpgrade', hysteria: 'QUIC', quic: 'QUIC', udp: 'UDP', masque: 'HTTP/3', '': 'TCP' }
+export const SEC = { none: 'без защиты', tls: 'TLS', reality: 'Reality', awg: 'обфускация AWG' }

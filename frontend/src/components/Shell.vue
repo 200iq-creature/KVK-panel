@@ -5,7 +5,7 @@
       <label class="tx-ib tx-burger" for="navtg" aria-label="Разделы"><Icon n="menu" /></label>
       <router-link class="tx-logo" to="/" :aria-label="'KVK Panel — ' + meta.node">
         <img :src="LOGO" alt="">
-        <span><b>KVK Panel</b><em>{{ meta.node || 'сервер' }} · {{ meta.host }} · v{{ meta.version || session.version }}</em></span>
+        <span><b>KVK Panel</b><em>{{ meta.node || 'сервер' }} · {{ meta.host }} · v{{ meta.version || session.version }}<template v-if="meta.branch && meta.branch !== 'main'"> · {{ meta.branch }}</template></em></span>
       </router-link>
       <span class="tx-sp"></span>
       <button v-if="meta.loaded" class="tx-xr" type="button" :title="'Ядро Xray — сменить версию, обновить или откатить'" @click="openXray"><i :class="meta.xray?.running ? 'ok' : 'bad'"></i><span>Xray</span><b>{{ meta.xray?.version ? 'v' + meta.xray.version : 'нет' }}</b></button>

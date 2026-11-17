@@ -1,12 +1,16 @@
 package app
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -37,6 +41,8 @@ func (a *App) apiSettings(w http.ResponseWriter, r *http.Request) error {
 		res["https"] = s.PanelCertID != ""
 	})
 	res["version"] = Version
+	res["branch"] = Branch
+	res["updateBranch"] = a.UpdateBranch()
 	res["repo"] = RepoSlug
 	ok(w, res)
 	return nil
@@ -267,25 +273,57 @@ func (a *App) apiSettingsResetAll(w http.ResponseWriter, r *http.Request) error 
 
 // ---------- panel self-update ----------
 
-func fetchLatestPanelVersion() (string, error) {
-	b, err := httpGetBytes("https://api.github.com/repos/"+RepoSlug+"/releases/latest", 1<<20)
+var branchRe = regexp.MustCompile(`^[A-Za-z0-9._][A-Za-z0-9._/-]*$`)
+
+// UpdateBranch is the branch the installer will update from: the one it
+// remembered in DATA/branch, otherwise the branch this binary was built from.
+func (a *App) UpdateBranch() string {
+	if b, err := os.ReadFile(filepath.Join(a.DataDir, "branch")); err == nil {
+		if v := strings.TrimSpace(string(b)); branchRe.MatchString(v) {
+			return v
+		}
+	}
+	if branchRe.MatchString(Branch) {
+		return Branch
+	}
+	return "main"
+}
+
+// fetchLatestPanelVersion reads the VERSION file of the branch the panel
+// updates from (the installer builds that branch; releases are cut from main
+// with the same VERSION).
+func fetchLatestPanelVersion(branch string) (string, error) {
+	vb, err := httpGetBytes("https://raw.githubusercontent.com/"+RepoSlug+"/"+branch+"/VERSION?t="+strconv.FormatInt(nowMs(), 10), 1024)
 	if err != nil {
-		// no published release yet: the installer builds from the main branch,
-		// so the VERSION file there is the source of truth
-		vb, verr := httpGetBytes("https://raw.githubusercontent.com/"+RepoSlug+"/main/VERSION", 1024)
-		if verr != nil {
-			return "", err
+		// raw.githubusercontent.com is blocked in some networks — ask the API
+		if jb, aerr := httpGetBytes("https://api.github.com/repos/"+RepoSlug+"/contents/VERSION?ref="+url.QueryEscape(branch), 64<<10); aerr == nil {
+			var f struct {
+				Content string `json:"content"`
+			}
+			if json.Unmarshal(jb, &f) == nil {
+				if dec, derr := base64.StdEncoding.DecodeString(strings.ReplaceAll(f.Content, "\n", "")); derr == nil {
+					vb, err = dec, nil
+				}
+			}
 		}
-		v := strings.TrimSpace(string(vb))
-		if v == "" {
-			return "", err
+	}
+	if err == nil {
+		if v := strings.TrimPrefix(strings.TrimSpace(string(vb)), "v"); v != "" {
+			return v, nil
 		}
-		return strings.TrimPrefix(v, "v"), nil
+		err = fmt.Errorf("пустой VERSION в ветке %s", branch)
+	}
+	if branch != "main" {
+		return "", err
+	}
+	b, rerr := httpGetBytes("https://api.github.com/repos/"+RepoSlug+"/releases/latest", 1<<20)
+	if rerr != nil {
+		return "", err
 	}
 	var rel struct {
 		TagName string `json:"tag_name"`
 	}
-	if err := json.Unmarshal(b, &rel); err != nil {
+	if jerr := json.Unmarshal(b, &rel); jerr != nil || rel.TagName == "" {
 		return "", err
 	}
 	return strings.TrimPrefix(rel.TagName, "v"), nil
@@ -310,22 +348,25 @@ func versionNewer(latest, cur string) bool {
 }
 
 func (a *App) apiPanelUpdateCheck(w http.ResponseWriter, r *http.Request) error {
-	latest, err := fetchLatestPanelVersion()
+	branch := a.UpdateBranch()
+	latest, err := fetchLatestPanelVersion(branch)
 	if err != nil {
-		return errf(502, "Не удалось проверить обновления: %v", err)
+		return errf(502, "Не удалось проверить обновления (ветка %s): %v", branch, err)
 	}
 	a.Store.Update(func(d *Data) error {
 		d.Settings.LatestVersion = latest
 		d.Settings.LastUpdateCheck = nowMs()
 		return nil
 	})
-	ok(w, map[string]any{"current": Version, "latest": latest, "update": versionNewer(latest, Version)})
+	ok(w, map[string]any{"current": Version, "latest": latest, "branch": branch, "update": versionNewer(latest, Version)})
 	return nil
 }
 
 // RunSelfUpdate launches the installer in update mode outside of the panel process.
 func (a *App) RunSelfUpdate() error {
-	script := "curl -fsSL https://raw.githubusercontent.com/" + RepoSlug + "/main/install.sh | bash -s -- update"
+	branch := a.UpdateBranch()
+	// the branch name is validated by branchRe, so it is safe inside the script
+	script := "curl -fsSL https://raw.githubusercontent.com/" + RepoSlug + "/" + branch + "/install.sh -o /tmp/kvk-install.sh && bash /tmp/kvk-install.sh update " + branch
 	if _, err := exec.LookPath("systemd-run"); err == nil {
 		cmd := exec.Command("systemd-run", "--unit=kvk-panel-update-"+RandomString(5), "--no-block", "/bin/bash", "-c", script)
 		if out, err := cmd.CombinedOutput(); err != nil {

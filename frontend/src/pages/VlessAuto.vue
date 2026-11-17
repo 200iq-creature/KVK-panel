@@ -40,7 +40,7 @@
                 <div v-if="!d.links.length" class="i-hint wa"><Icon n="info" /><span>У автоинбаундов пока нет клиентов. <router-link to="/clients">Создайте клиента</router-link> и выдайте ему «Reality» и «CDN».</span></div>
                 <div v-for="l in d.links" :key="l.link" class="au-link">
                   <span class="au-ic" :class="l.security === 'reality' ? '' : 'cdn'"><Icon :n="l.security === 'reality' ? 'bolt' : 'globe'" /></span>
-                  <span class="au-lt"><b>{{ l.security === 'reality' ? 'Reality · напрямую' : 'Через Cloudflare CDN' }}</b><small class="mono">{{ l.link.slice(0, 64) }}…</small></span>
+                  <span class="au-lt"><b>{{ kind(l).t }}</b><small>{{ kind(l).s }}</small></span>
                   <button class="btn btn-sm btn-g btn-ic" type="button" title="QR-код" @click="qr = l"><Icon n="qr" /></button>
                   <button class="btn btn-sm" type="button" @click="copy(l.link)"><Icon n="copy" />Копировать</button>
                 </div>
@@ -48,7 +48,7 @@
                   <span class="lbl">Подписка (все подключения сразу)</span>
                   <div class="row"><code class="grow">{{ d.subUrl }}</code><button class="btn btn-sm btn-g btn-ic" type="button" title="QR-код" @click="qr = { name: 'Подписка', link: d.subUrl }"><Icon n="qr" /></button><button class="btn btn-sm" type="button" @click="copy(d.subUrl)"><Icon n="copy" />Копировать</button></div>
                 </div>
-                <p class="hint">Reality — основной быстрый вход. CDN-вход идёт через Cloudflare и работает, даже если IP сервера заблокируют. Все клиенты в разделе <router-link to="/clients">«Клиенты»</router-link> получают оба подключения в подписке.</p>
+                <p class="hint">Reality — основной быстрый вход, подключается к IP сервера напрямую. CDN-входы идут через Cloudflare и работают, даже если IP сервера заблокируют: XHTTP — для приложений на Xray, WebSocket — для приложений на sing-box и Clash (у них нет XHTTP). По подписке каждое приложение само получает подходящий вариант. Клиенты из раздела <router-link to="/clients">«Клиенты»</router-link> получают все эти подключения в подписке.</p>
               </div>
             </section>
 
@@ -155,7 +155,7 @@
                   <div class="steps small">
                     <div class="step"><i>✓</i><span>сайт-прикрытие на {{ f.domains.length ? f.domains.map(x => x.name).join(', ') : 'ваших доменах' }}</span></div>
                     <div class="step"><i>✓</i><span>VLESS Reality (Vision) на порту {{ f.port }}, маска {{ f.sni || '—' }}</span></div>
-                    <div v-if="f.cdn" class="step"><i>✓</i><span>VLESS XHTTP через CDN: {{ cdnList.length ? cdnList.join(', ') : 'включите облако хотя бы для одного домена' }}</span></div>
+                    <div v-if="f.cdn" class="step"><i>✓</i><span>VLESS через CDN (XHTTP + WebSocket для sing-box/Clash): {{ cdnList.length ? cdnList.join(', ') : 'включите облако хотя бы для одного домена' }}</span></div>
                     <div class="step"><i>✓</i><span>сертификаты Let's Encrypt и их продление, открытые порты</span></div>
                   </div>
                   <div class="ft">
@@ -234,6 +234,12 @@ const previewUrl = computed(() => BASE + 'api/autosetup/preview?k=' + frameKey.v
 const cfOn = computed(() => f.cfManage && (f.cfToken || d.value?.cfTokenSet))
 const cdnList = computed(() => f.domains.filter(x => x.proxy).map(x => x.name))
 const missingZones = computed(() => Object.entries(chk.value?.cf?.zones || {}).filter(([, z]) => !z).map(([n]) => n))
+const kind = (l) => l.security === 'reality'
+  ? { t: 'Reality · напрямую', s: 'все приложения · IP сервера, маска ' + (l.link.match(/sni=([^&]+)/)?.[1] || '') }
+  : l.network === 'ws'
+    ? { t: 'CDN · WebSocket · ' + host(l), s: 'Hiddify, sing-box, NekoBox, Throne, Karing, Clash/mihomo' }
+    : { t: 'CDN · XHTTP · ' + host(l), s: 'v2rayN, v2rayNG, Happ, Streisand, V2Box' }
+const host = (l) => l.link.match(/@([^:/?#]+)/)?.[1] || ''
 const dnsOf = (n) => (chk.value?.domains || []).find(x => x.name === n)
 
 const norm = (s) => s.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/[/:].*$/, '').replace(/\.$/, '')

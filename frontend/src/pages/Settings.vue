@@ -129,10 +129,10 @@
           <section class="i-pn">
             <div class="i-ph"><h2>Обновление панели</h2><span class="i-stt" :class="upd?.update ? 'wa' : 'ok'">{{ upd ? (upd.update ? 'есть обновление' : 'актуальная') : '—' }}</span></div>
             <div class="i-pb">
-              <div class="i-kv"><Kr k="Установлена" :v="s.version" /><Kr k="Последняя" :v="upd?.latest || s.latestVersion || '—'" /><Kr k="Репозиторий" :v="s.repo" code /></div>
+              <div class="i-kv"><Kr k="Установлена" :v="'v' + s.version + (s.branch && s.branch !== 'main' ? ' · ветка ' + s.branch : '')" /><Kr k="Последняя" :v="(upd?.latest || s.latestVersion) ? 'v' + (upd?.latest || s.latestVersion) : '—'" /><Kr k="Обновляться из ветки" :v="upd?.branch || s.updateBranch || 'main'" code /><Kr k="Репозиторий" :v="s.repo" code /></div>
               <TgRow v-model="g.autoUpdate" bold label="Обновляться автоматически" hint="проверка раз в сутки; бэкап перед обновлением" @update:model-value="saveGeneral" />
               <div class="ft"><button class="btn btn-g" type="button" :disabled="busy.chk" @click="checkUpd"><span v-if="busy.chk" class="spin"></span>Проверить</button><span class="grow"></span><button class="btn btn-p" type="button" :disabled="!upd?.update || busy.upd" @click="doUpdate"><span v-if="busy.upd" class="spin"></span>Обновить до {{ upd?.latest }}</button></div>
-              <p class="hint">Из консоли: <code class="i-mono">kvk update</code></p>
+              <p class="hint">Из консоли: <code class="i-mono">kvk update</code> — из запомненной ветки, <code class="i-mono">kvk update ВЕТКА</code> — переключиться на другую ветку (например, <code class="i-mono">main</code>).</p>
             </div>
           </section>
         </div>

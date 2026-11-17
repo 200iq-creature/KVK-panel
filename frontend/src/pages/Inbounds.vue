@@ -23,15 +23,15 @@
                 <div class="vw-ib">
                   <span class="vw-pr">
                     <span class="vw-mv"><button class="btn btn-g btn-ic" type="button" :disabled="idx === 0" title="Выше" @click="move(i, -1)"><Icon n="up" /></button><button class="btn btn-g btn-ic" type="button" :disabled="idx === list.length - 1" title="Ниже" @click="move(i, 1)"><Icon n="down" /></button></span>
-                    <span class="vw-ic"><Icon :n="i.security === 'reality' ? 'shield' : i.security === 'tls' ? 'lock' : i.protocol === 'hysteria2' ? 'bolt' : 'inb'" /></span>
+                    <span class="vw-ic"><Icon :n="i.protocol === 'amneziawg' ? 'shield' : ['hysteria2', 'tuic'].includes(i.protocol) ? 'bolt' : i.security === 'reality' ? 'shield' : i.security === 'tls' ? 'lock' : 'inb'" /></span>
                     <span class="vw-id"><b>{{ PROTO[i.protocol] }}</b><small>{{ secLabel(i) }}</small></span>
                   </span>
                   <span class="vw-c vw-strong">{{ i.remark }}</span>
                   <span class="vw-c i-mono">{{ i.port }}</span>
-                  <span class="vw-c">{{ i.protocol === 'hysteria2' ? 'QUIC' : NET[i.network] }}</span>
+                  <span class="vw-c">{{ netLabel(i) }}</span>
                   <span class="vw-c"><b class="vw-strong">{{ i.clients }}</b><span v-if="i.online" class="vw-mu"> · {{ i.online }} онлайн</span></span>
                   <span class="vw-br"></span>
-                  <span class="vw-st"><button class="i-tg" :class="{ on: i.enabled }" type="button" :title="i.enabled ? 'Выключить' : 'Включить'" @click="toggle(i)"><span></span></button><span class="i-stt" :class="i.enabled ? 'ok' : 'mu'">{{ i.enabled ? 'вкл' : 'выкл' }}</span></span>
+                  <span class="vw-st"><button class="i-tg" :class="{ on: i.enabled }" type="button" :title="i.enabled ? 'Выключить' : 'Включить'" @click="toggle(i)"><span></span></button><span class="i-stt" :class="i.embError && i.enabled ? 'bad' : i.enabled ? 'ok' : 'mu'" :title="i.embError ? 'Не запустился: ' + i.embError : ''">{{ i.embError && i.enabled ? 'ошибка' : i.enabled ? 'вкл' : 'выкл' }}</span></span>
                   <span class="vw-ra"><button class="btn btn-sm btn-g" type="button" @click="openForm(i)"><Icon n="edit" />Изменить</button><button class="btn btn-sm btn-g btn-ic" type="button" :title="openId === i.id ? 'Свернуть' : 'Подробнее'" @click="openId = openId === i.id ? '' : i.id"><Icon :n="openId === i.id ? 'up' : 'chevD'" /></button></span>
                 </div>
                 <div v-if="openId === i.id" class="vw-exp">
@@ -51,6 +51,21 @@
                       <div v-if="i.serviceName" class="i-kr vw-k2"><span>serviceName</span><code>{{ i.serviceName }}</code></div>
                       <div v-if="i.ssMethod" class="i-kr vw-k2"><span>метод</span><code>{{ i.ssMethod }}</code></div>
                       <div v-if="i.obfsPassword" class="i-kr vw-k2"><span>obfs</span><code>salamander</code></div>
+                      <div v-if="i.embError && i.enabled" class="i-kr vw-k2"><span>ошибка запуска</span><code class="bad-t">{{ i.embError }}</code></div>
+                      <template v-if="i.protocol === 'tuic'">
+                        <div class="i-kr vw-k2"><span>контроль перегрузки</span><code>{{ i.tuicCongestion }}</code></div>
+                        <div class="i-kr vw-k2"><span>UDP relay</span><code>{{ i.tuicUdpMode }}{{ i.tuicZeroRtt ? ' · 0-RTT' : '' }}</code></div>
+                      </template>
+                      <template v-if="i.protocol === 'masque'">
+                        <div class="i-kr vw-k2"><span>HTTP</span><code>{{ masqueNet(i) }}</code></div>
+                        <div class="i-kr vw-k2"><span>пул адресов</span><code>{{ (i.masquePool || []).join(', ') }}</code></div>
+                      </template>
+                      <template v-if="i.protocol === 'amneziawg' && i.awg">
+                        <div class="i-kr vw-k2"><span>подсеть</span><code>{{ i.awg.network }}</code></div>
+                        <div class="i-kr vw-k2"><span>публичный ключ</span><code>{{ i.awg.publicKey }}</code></div>
+                        <div class="i-kr vw-k2"><span>Jc / Jmin / Jmax</span><code>{{ i.awg.jc }} / {{ i.awg.jmin }} / {{ i.awg.jmax }}</code></div>
+                        <div class="i-kr vw-k2"><span>S1 / S2</span><code>{{ i.awg.s1 }} / {{ i.awg.s2 }}</code></div>
+                      </template>
                       <div class="i-kr vw-k2"><span>трафик</span><code>↑ {{ bytes(i.up) }} · ↓ {{ bytes(i.down) }}</code></div>
                     </div>
                   </div>
@@ -118,7 +133,9 @@ const showAll = reactive({})
 const form = reactive({ open: false, inbound: null })
 const fref = ref(null)
 const busy = reactive({ save: false })
-const secLabel = (i) => i.protocol === 'hysteria2' ? `TLS${i.obfsPassword ? ' · salamander' : ''}` : i.security === 'reality' ? 'Reality · маскировка под сайт' : i.security === 'tls' ? 'TLS' : 'без защиты'
+const netLabel = (i) => ({ hysteria2: 'QUIC', tuic: 'QUIC', amneziawg: 'UDP', masque: masqueNet(i) })[i.protocol] || NET[i.network]
+const masqueNet = (i) => { const a = i.alpn || []; const h2 = a.includes('h2'), h3 = a.includes('h3') || !h2; return h2 && h3 ? 'HTTP/3 + HTTP/2' : h2 ? 'HTTP/2' : 'HTTP/3' }
+const secLabel = (i) => i.protocol === 'tuic' ? `TLS · ${i.tuicCongestion || 'bbr'}` : i.protocol === 'masque' ? 'TLS · CONNECT-IP' : i.protocol === 'amneziawg' ? 'обфускация AmneziaWG' : i.protocol === 'hysteria2' ? `TLS${i.obfsPassword ? ' · salamander' : ''}` : i.security === 'reality' ? 'Reality · маскировка под сайт' : i.security === 'tls' ? 'TLS' : 'без защиты'
 
 function openForm(i) { form.inbound = i ? JSON.parse(JSON.stringify(i)) : null; form.open = true }
 async function save() {
