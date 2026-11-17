@@ -13,7 +13,7 @@ BIN="$INSTALL_DIR/kvk-panel"
 XRAY_DIR="$INSTALL_DIR/bin"
 DATA_DIR="/etc/kvk-panel"
 SERVICE="kvk-panel"
-GO_VERSION="1.24.6"
+GO_VERSION="1.25.5"
 
 red() { printf '\033[31m%s\033[0m\n' "$*"; }
 green() { printf '\033[32m%s\033[0m\n' "$*"; }

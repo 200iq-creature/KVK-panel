@@ -37,6 +37,8 @@ type App struct {
 		statsErr    string
 	}
 
+	emb embState
+
 	applyMu      sync.Mutex
 	applyPending bool
 	restartPanel chan struct{}
@@ -88,6 +90,8 @@ func (a *App) Run() error {
 		}
 	} else {
 		log.Printf("xray binary not found in %s", a.BinDir)
+		a.prepareEmbedded()
+		a.syncEmbeddedLogged()
 	}
 	go a.migrateAutoSetup()
 	if err := a.StartFakeSite(); err != nil {
@@ -111,6 +115,7 @@ func (a *App) Run() error {
 		case <-a.ctx.Done():
 			srv.shutdown()
 			a.Xray.Stop()
+			a.stopEmbedded()
 			a.StopFakeSite()
 			mtg.stop()
 			a.Store.Flush()

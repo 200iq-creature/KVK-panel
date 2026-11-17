@@ -37,6 +37,7 @@ type Settings struct {
 	DefaultFP      string `json:"defaultFp"`
 	AutoUpdate     bool   `json:"autoUpdate"`
 	XrayAPIPort    int    `json:"xrayApiPort"`
+	BridgePort     int    `json:"bridgePort,omitempty"` // local VLESS inbound for TUIC / AmneziaWG
 	TimeZone       string `json:"timeZone"`
 	ShowTrafficAll bool   `json:"showTrafficAll"`
 	NewResetPeriod string `json:"newResetPeriod"`
@@ -154,7 +155,7 @@ type Inbound struct {
 	Tag      string `json:"tag"`
 	Remark   string `json:"remark"`
 	Enabled  bool   `json:"enabled"`
-	Protocol string `json:"protocol"` // vless vmess trojan shadowsocks hysteria2
+	Protocol string `json:"protocol"` // vless vmess trojan shadowsocks hysteria2 tuic amneziawg masque
 	Listen   string `json:"listen"`
 	Port     int    `json:"port"`
 	Network  string `json:"network"`  // tcp ws grpc xhttp httpupgrade
@@ -184,6 +185,15 @@ type Inbound struct {
 	SSPassword string `json:"ssPassword"`
 	// hysteria2
 	ObfsPassword string `json:"obfsPassword"`
+	// tuic (served by the panel itself)
+	TUICCongestion string `json:"tuicCongestion,omitempty"` // bbr cubic new_reno
+	TUICUDPMode    string `json:"tuicUdpMode,omitempty"`    // native quic
+	TUICZeroRTT    bool   `json:"tuicZeroRtt,omitempty"`
+	// masque (xray): tunnel address pool and MTU (MTU is also used by AmneziaWG)
+	MasquePool []string `json:"masquePool,omitempty"`
+	MTU        int      `json:"mtu,omitempty"`
+	// amneziawg (served by the panel itself)
+	AWG *AWGSettings `json:"awg,omitempty"`
 	// links
 	ExternalHost string `json:"externalHost"`
 	ExternalPort int    `json:"externalPort"`
@@ -196,6 +206,31 @@ type Inbound struct {
 	Up         int64    `json:"up"`
 	Down       int64    `json:"down"`
 	CreatedAt  int64    `json:"createdAt"`
+}
+
+// AWGSettings describes an AmneziaWG server. Client keys and addresses live in
+// Client.WGKey / Client.WGIndex so they stay the same on every linked server.
+type AWGSettings struct {
+	PrivateKey string   `json:"privateKey"` // base64
+	PublicKey  string   `json:"publicKey"`
+	Network    string   `json:"network"` // e.g. 10.66.0.0/16, the server takes .1
+	DNS        []string `json:"dns"`
+	Jc         int      `json:"jc"`
+	Jmin       int      `json:"jmin"`
+	Jmax       int      `json:"jmax"`
+	S1         int      `json:"s1"`
+	S2         int      `json:"s2"`
+	S3         int      `json:"s3,omitempty"`
+	S4         int      `json:"s4,omitempty"`
+	H1         string   `json:"h1"`
+	H2         string   `json:"h2"`
+	H3         string   `json:"h3"`
+	H4         string   `json:"h4"`
+	I1         string   `json:"i1,omitempty"`
+	I2         string   `json:"i2,omitempty"`
+	I3         string   `json:"i3,omitempty"`
+	I4         string   `json:"i4,omitempty"`
+	I5         string   `json:"i5,omitempty"`
 }
 
 type Client struct {
@@ -227,38 +262,46 @@ type Client struct {
 	LastSubUA    string   `json:"lastSubUa"`
 	LastSubIP    string   `json:"lastSubIp"`
 	Origin       string   `json:"origin,omitempty"`
+	// AmneziaWG credentials: private key (base64) and host number inside AWG networks
+	WGKey   string `json:"wgKey,omitempty"`
+	WGIndex int    `json:"wgIndex,omitempty"`
 	// traffic already reported to main server (when this server is a node)
 	ReportedUp   int64 `json:"reportedUp,omitempty"`
 	ReportedDown int64 `json:"reportedDown,omitempty"`
 }
 
 type NodeInbound struct {
-	ID            string   `json:"id"`
-	Tag           string   `json:"tag"`
-	Remark        string   `json:"remark"`
-	Protocol      string   `json:"protocol"`
-	Host          string   `json:"host"`
-	Port          int      `json:"port"`
-	Network       string   `json:"network"`
-	Security      string   `json:"security"`
-	Flow          string   `json:"flow"`
-	SNI           string   `json:"sni"`
-	PublicKey     string   `json:"publicKey"`
-	ShortID       string   `json:"shortId"`
-	SpiderX       string   `json:"spiderX"`
-	FP            string   `json:"fp"`
-	ALPN          []string `json:"alpn"`
-	Path          string   `json:"path"`
-	HostHdr       string   `json:"hostHdr"`
-	ServiceName   string   `json:"serviceName"`
-	XHTTPMode     string   `json:"xhttpMode"`
-	HeaderType    string   `json:"headerType"`
-	SSMethod      string   `json:"ssMethod"`
-	SSPassword    string   `json:"ssPassword"`
-	ObfsPassword  string   `json:"obfsPassword"`
-	AllowInsecure bool     `json:"allowInsecure"`
-	CertSha256    string   `json:"certSha256,omitempty"`
-	Front         bool     `json:"front,omitempty"` // reached through the decoy site / CDN
+	ID             string       `json:"id"`
+	Tag            string       `json:"tag"`
+	Remark         string       `json:"remark"`
+	Protocol       string       `json:"protocol"`
+	Host           string       `json:"host"`
+	Port           int          `json:"port"`
+	Network        string       `json:"network"`
+	Security       string       `json:"security"`
+	Flow           string       `json:"flow"`
+	SNI            string       `json:"sni"`
+	PublicKey      string       `json:"publicKey"`
+	ShortID        string       `json:"shortId"`
+	SpiderX        string       `json:"spiderX"`
+	FP             string       `json:"fp"`
+	ALPN           []string     `json:"alpn"`
+	Path           string       `json:"path"`
+	HostHdr        string       `json:"hostHdr"`
+	ServiceName    string       `json:"serviceName"`
+	XHTTPMode      string       `json:"xhttpMode"`
+	HeaderType     string       `json:"headerType"`
+	SSMethod       string       `json:"ssMethod"`
+	SSPassword     string       `json:"ssPassword"`
+	ObfsPassword   string       `json:"obfsPassword"`
+	AllowInsecure  bool         `json:"allowInsecure"`
+	CertSha256     string       `json:"certSha256,omitempty"`
+	Front          bool         `json:"front,omitempty"` // reached through the decoy site / CDN
+	TUICCongestion string       `json:"tuicCongestion,omitempty"`
+	TUICUDPMode    string       `json:"tuicUdpMode,omitempty"`
+	TUICZeroRTT    bool         `json:"tuicZeroRtt,omitempty"`
+	MTU            int          `json:"mtu,omitempty"`
+	AWG            *AWGSettings `json:"awg,omitempty"` // PrivateKey is always blank here
 }
 
 type Node struct {
@@ -594,6 +637,7 @@ func (s *Store) Update(fn func(d *Data) error) error {
 	if err := fn(s.d); err != nil {
 		return err
 	}
+	ensureWGCreds(s.d) // new clients get AmneziaWG credentials right away
 	return s.saveLocked()
 }
 
@@ -618,6 +662,7 @@ func (s *Store) Replace(d *Data) error {
 	defer s.mu.Unlock()
 	s.d = d
 	s.fillDefaults()
+	ensureWGCreds(s.d)
 	return s.saveLocked()
 }
 

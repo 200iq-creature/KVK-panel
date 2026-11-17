@@ -192,13 +192,17 @@ func (a *App) handleSubscription(w http.ResponseWriter, r *http.Request, subID s
 	case "links":
 		lines := []string{}
 		for _, l := range links {
-			lines = append(lines, l.Link)
+			if l.Link != "" {
+				lines = append(lines, l.Link)
+			}
 		}
 		_, _ = w.Write([]byte(strings.Join(lines, "\n")))
 	default:
 		lines := []string{}
 		for _, l := range links {
-			lines = append(lines, l.Link)
+			if l.Link != "" {
+				lines = append(lines, l.Link)
+			}
 		}
 		_, _ = w.Write([]byte(base64.StdEncoding.EncodeToString([]byte(strings.Join(lines, "\n")))))
 	}
@@ -219,14 +223,16 @@ func asciiOnly(s string) string {
 
 func (a *App) subInfo(w http.ResponseWriter, c *Client, status string, links []linkItem, sub SubSettings, st Settings, subURL string) {
 	type L struct {
-		Name     string `json:"name"`
-		Link     string `json:"link"`
-		Protocol string `json:"protocol"`
-		Node     string `json:"node"`
+		Name       string `json:"name"`
+		Link       string `json:"link"`
+		Protocol   string `json:"protocol"`
+		Node       string `json:"node"`
+		Config     string `json:"config,omitempty"`
+		ConfigType string `json:"configType,omitempty"`
 	}
 	ls := []L{}
 	for _, l := range links {
-		ls = append(ls, L{l.Name, l.Link, l.Protocol, l.Node})
+		ls = append(ls, L{l.Name, l.Link, l.Protocol, l.Node, l.Config, l.ConfigType})
 	}
 	title := sub.PageTitle
 	if title == "" {
@@ -501,6 +507,63 @@ func clashProxy(l linkItem, c *Client) M {
 			p["obfs-password"] = ep.ObfsPassword
 		}
 		p["alpn"] = []string{"h3"}
+	case "tuic":
+		p["type"] = "tuic"
+		p["uuid"] = c.UUID
+		p["password"] = c.Password
+		if ep.SNI != "" {
+			p["sni"] = ep.SNI
+		}
+		if ep.AllowInsecure {
+			p["skip-cert-verify"] = true
+		}
+		p["alpn"] = orStrings(ep.ALPN, []string{"h3"})
+		p["congestion-controller"] = orDefault(ep.TUICCongestion, "bbr")
+		p["udp-relay-mode"] = orDefault(ep.TUICUDPMode, "native")
+		if ep.TUICZeroRTT {
+			p["reduce-rtt"] = true
+		}
+		p["request-timeout"] = 8000
+	case "amneziawg":
+		// mihomo: wireguard with AmneziaWG obfuscation
+		if ep.AWG == nil || c.WGKey == "" {
+			return nil
+		}
+		ip, ok := awgClientIP(ep.AWG.Network, c.WGIndex)
+		if !ok {
+			return nil
+		}
+		a := ep.AWG
+		opt := M{"jc": a.Jc, "jmin": a.Jmin, "jmax": a.Jmax, "s1": a.S1, "s2": a.S2}
+		if a.S3 > 0 {
+			opt["s3"] = a.S3
+		}
+		if a.S4 > 0 {
+			opt["s4"] = a.S4
+		}
+		for k, v := range map[string]string{"h1": a.H1, "h2": a.H2, "h3": a.H3, "h4": a.H4, "i1": a.I1, "i2": a.I2, "i3": a.I3, "i4": a.I4, "i5": a.I5} {
+			if v == "" {
+				continue
+			}
+			if n, err := strconv.ParseUint(v, 10, 32); err == nil {
+				opt[k] = n
+			} else {
+				opt[k] = v
+			}
+		}
+		mtu := ep.MTU
+		if mtu == 0 {
+			mtu = 1280
+		}
+		p["type"] = "wireguard"
+		p["ip"] = ip.String()
+		p["private-key"] = c.WGKey
+		p["public-key"] = a.PublicKey
+		p["allowed-ips"] = []string{"0.0.0.0/0", "::/0"}
+		p["mtu"] = mtu
+		p["remote-dns-resolve"] = true
+		p["dns"] = a.DNS
+		p["amnezia-wg-option"] = opt
 	default:
 		return nil
 	}

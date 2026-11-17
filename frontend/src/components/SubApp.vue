@@ -46,10 +46,24 @@
           </div>
         </section>
 
-        <section v-if="d.view === 'classic' && d.links.length" class="i-pn">
-          <div class="i-ph"><h2>Конфигурации <span class="i-cnt">{{ d.links.length }}</span></h2><button class="btn btn-sm btn-g" type="button" @click="copyText(d.links.map(l => l.link).join('\n'), 'Все ссылки скопированы')"><Icon n="copy" />Все</button></div>
+        <section v-if="awg.length" class="i-pn">
+          <div class="i-ph"><h2>AmneziaWG <span class="i-cnt">{{ awg.length }}</span></h2><span>отдельное приложение</span></div>
+          <div class="i-pb">
+            <p class="hint" style="margin:0 0 10px">Установите <a href="https://amnezia.org/downloads" target="_blank" rel="noopener">AmneziaVPN</a> или AmneziaWG, затем импортируйте файл конфигурации или отсканируйте QR-код.</p>
+            <div class="list-rows">
+              <div v-for="(l, i) in awg" :key="'a' + i" class="lr">
+                <span class="lr-t"><b>{{ l.name }}</b><small>AmneziaWG{{ l.node ? ' · ' + l.node : '' }}</small></span>
+                <span class="acts"><button class="btn btn-sm btn-g btn-ic" type="button" title="Скачать .conf" @click="dl(l)"><Icon n="download" /></button><button class="btn btn-sm btn-g btn-ic" type="button" title="QR" @click="qr = qr === 'a' + i ? -1 : 'a' + i"><Icon n="qr" /></button><button class="btn btn-sm btn-g btn-ic" type="button" title="Копировать" @click="copyText(l.config, 'Конфиг скопирован')"><Icon n="copy" /></button></span>
+                <div v-if="qr === 'a' + i" style="flex-basis:100%;display:flex;justify-content:center;padding:8px 0"><Qr :text="l.config" :size="260" /></div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section v-if="d.view === 'classic' && plain.length" class="i-pn">
+          <div class="i-ph"><h2>Конфигурации <span class="i-cnt">{{ plain.length }}</span></h2><button class="btn btn-sm btn-g" type="button" @click="copyText(plain.map(l => l.link).join('\n'), 'Все ссылки скопированы')"><Icon n="copy" />Все</button></div>
           <div class="list-rows" style="padding:0 16px 16px">
-            <div v-for="(l, i) in d.links" :key="i" class="lr">
+            <div v-for="(l, i) in plain" :key="i" class="lr">
               <span class="lr-t"><b>{{ l.name }}</b><small>{{ (l.protocol || '').toUpperCase() }}{{ l.node ? ' · ' + l.node : '' }}</small></span>
               <span class="acts"><button class="btn btn-sm btn-g btn-ic" type="button" title="QR" @click="qr = qr === i ? -1 : i"><Icon n="qr" /></button><button class="btn btn-sm btn-g btn-ic" type="button" title="Копировать" @click="copyText(l.link)"><Icon n="copy" /></button></span>
               <div v-if="qr === i" style="flex-basis:100%;display:flex;justify-content:center;padding:8px 0"><Qr :text="l.link" :size="200" /></div>
@@ -97,6 +111,16 @@ const platform = ref(detect())
 const apps = computed(() => BY[platform.value].map(k => ({ ...APPS[k], store: APPS[k].stores[platform.value] })))
 const d = ref(null)
 const err = ref('')
+const awg = computed(() => (d.value?.links || []).filter(l => l.configType === 'awg' && l.config))
+const plain = computed(() => (d.value?.links || []).filter(l => l.link))
+function dl(l) {
+  const name = (l.name || 'awg').replace(/[^a-zA-Z0-9_=+.-]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 15) || 'awg'
+  const a = document.createElement('a')
+  a.href = URL.createObjectURL(new Blob([l.config], { type: 'text/plain' }))
+  a.download = name + (l.configType === 'awg' ? '.conf' : '.json')
+  document.body.appendChild(a); a.click(); a.remove()
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000)
+}
 const loading = ref(true)
 const qr = ref(-1)
 const toast = ref('')

@@ -1,6 +1,6 @@
 # KVK Panel
 
-Веб-панель для Xray-core: клиенты, подписки, инбаунды (VLESS Reality / XHTTP / WS / gRPC, VMess, Trojan, Shadowsocks 2022, Hysteria2), бот-магазин, Telegram-прокси (MTProto/SOCKS), связка серверов, бэкапы, 2FA, фильтрация рекламы, WARP, миграция с 3x-ui/Remnawave, сертификаты Let's Encrypt для доменов и IP, логи. Версию Xray можно выбрать, обновить и откатить прямо из панели.
+Веб-панель для Xray-core: клиенты, подписки, инбаунды (VLESS Reality / XHTTP / WS / gRPC, VMess, Trojan, Shadowsocks 2022, Hysteria2, TUIC v5, AmneziaWG, MASQUE), бот-магазин, Telegram-прокси (MTProto/SOCKS), связка серверов, бэкапы, 2FA, фильтрация рекламы, WARP, миграция с 3x-ui/Remnawave, сертификаты Let's Encrypt для доменов и IP, логи. Версию Xray можно выбрать, обновить и откатить прямо из панели.
 
 ## Установка
 
@@ -34,6 +34,16 @@ bash <(curl -fsSL https://raw.githubusercontent.com/200iq-creature/KVK-panel/mai
 - выпустит и будет продлевать сертификаты Let's Encrypt, откроет порты, проверит, что всё отвечает, и выдаст ссылки с подпиской.
 
 Удалить автонастройку можно одной кнопкой. Клиенты и сертификаты при этом останутся.
+
+## TUIC, AmneziaWG и MASQUE
+
+Создаются в «Инбаундах», как остальные протоколы.
+
+- **TUIC v5** (QUIC/UDP, всегда TLS). Сервер встроен в панель: используется реализация sing-quic, та же, что в sing-box. Обновляется вместе с панелью. Клиенты получают ссылку `tuic://`, а в Clash-подписке — прокси `tuic`. Подходят Hiddify, NekoBox, Karing, sing-box, v2rayN, Clash Meta.
+- **AmneziaWG** (UDP). WireGuard с обфускацией Jc/Jmin/Jmax/S1–S4/H1–H4/I1–I5. Сервер на amneziawg-go тоже встроен в панель и работает в userspace: модуль ядра, TUN и NAT не нужны. Параметры обфускации генерируются случайно. Каждый клиент получает свой ключ и адрес. Его `.conf` и QR-код есть в карточке клиента и на странице подписки, в Clash-подписке он идёт как `wireguard` с `amnezia-wg-option`. Подходят AmneziaVPN, AmneziaWG, Clash Meta.
+- **MASQUE** (CONNECT-IP поверх HTTP/3 или HTTP/2, всегда TLS). Работает в ядре Xray и обновляется вместе с ним. Можно включить HTTP/3 (UDP), HTTP/2 (TCP) или оба на одном порту. Конфиг выдаётся в JSON-подписке и в карточке клиента, для него нужен клиент на Xray 26+.
+
+Трафик TUIC и AmneziaWG панель передаёт в Xray через локальный мост. Поэтому статистика, лимиты трафика и устройств, сроки, WARP и фильтрация работают для них так же, как для VLESS. TCP- и UDP-инбаунды могут занимать один номер порта, например Reality на TCP 443 и TUIC на UDP 443.
 
 ## Версия Xray
 

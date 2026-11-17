@@ -71,7 +71,7 @@ func (a *App) panelURLLocked(d *Data) string {
 // publicInbound converts an inbound to a public descriptor used for links.
 func (a *App) publicInbound(d *Data, in *Inbound) NodeInbound {
 	host := d.Settings.PublicHost
-	if in.Security == "tls" || in.Protocol == "hysteria2" {
+	if in.Security == "tls" || alwaysTLS(in.Protocol) {
 		if in.TLSServerName != "" {
 			host = in.TLSServerName
 		} else if dm := d.DomainByID(in.CertID); dm != nil {
@@ -92,11 +92,17 @@ func (a *App) publicInbound(d *Data, in *Inbound) NodeInbound {
 		Network: in.Network, Security: in.Security, Path: in.Path, HostHdr: in.Host, ServiceName: in.ServiceName,
 		XHTTPMode: in.XHTTPMode, HeaderType: in.HeaderType, SSMethod: in.SSMethod, SSPassword: in.SSPassword,
 		ObfsPassword: in.ObfsPassword, AllowInsecure: in.AllowInsecure, ALPN: in.ALPN,
+		TUICCongestion: in.TUICCongestion, TUICUDPMode: in.TUICUDPMode, TUICZeroRTT: in.TUICZeroRTT, MTU: in.MTU,
+	}
+	if in.AWG != nil {
+		pub := *in.AWG
+		pub.PrivateKey = "" // never leaves the server
+		ep.AWG = &pub
 	}
 	if in.Protocol == "vless" && in.Network == "tcp" && (in.Security == "reality" || in.Security == "tls") {
 		ep.Flow = in.Flow
 	}
-	if in.AllowInsecure && (in.Security == "tls" || in.Protocol == "hysteria2") {
+	if in.AllowInsecure && (in.Security == "tls" || alwaysTLS(in.Protocol)) {
 		if dm := d.DomainByID(in.CertID); dm != nil && dm.CertFile != "" {
 			ep.CertSha256 = certFileSha256(dm.CertFile)
 		}
@@ -216,7 +222,35 @@ type linkItem struct {
 	Network  string `json:"network"`
 	Security string `json:"security"`
 	External bool   `json:"external,omitempty"`
-	ep       NodeInbound
+	// Config is a full client config for protocols without a share link
+	// (AmneziaWG .conf, MASQUE xray JSON); ConfigType is "awg" or "xray-json".
+	Config     string `json:"config,omitempty"`
+	ConfigType string `json:"configType,omitempty"`
+	ep         NodeInbound
+}
+
+func newLinkItem(ep NodeInbound, c *Client, nm, node string) linkItem {
+	li := linkItem{Name: nm, Link: buildLink(ep, c, nm), Protocol: ep.Protocol, Node: node, Inbound: ep.Remark, Network: ep.Network, Security: ep.Security, ep: ep}
+	switch ep.Protocol {
+	case "amneziawg":
+		li.Config, li.ConfigType = awgClientConfig(ep, c), "awg"
+		li.Network, li.Security = "udp", "awg"
+	case "masque":
+		if ob := clientOutbound(ep, c, "proxy"); ob != nil {
+			cfg := M{
+				"remarks":   nm,
+				"log":       M{"loglevel": "warning"},
+				"inbounds":  []any{M{"tag": "socks", "port": 10808, "listen": "127.0.0.1", "protocol": "socks", "settings": M{"udp": true}}},
+				"outbounds": []any{ob, M{"tag": "direct", "protocol": "freedom"}},
+			}
+			b, _ := json.MarshalIndent(cfg, "", "  ")
+			li.Config, li.ConfigType = string(b), "xray-json"
+		}
+		li.Network = "masque"
+	case "tuic":
+		li.Network = "quic"
+	}
+	return li
 }
 
 // clientEndpoints lists endpoints available to a client (local + linked nodes).
@@ -232,7 +266,7 @@ func (a *App) clientLinks(d *Data, c *Client, includeDisabled bool) []linkItem {
 		}
 		for _, ep := range a.publicInbounds(d, in) {
 			nm := formatName(d.Sub.NameFormat, c.Name, node, ep.Remark)
-			out = append(out, linkItem{Name: nm, Link: buildLink(ep, c, nm), Protocol: in.Protocol, Node: node, Inbound: ep.Remark, Network: ep.Network, Security: ep.Security, ep: ep})
+			out = append(out, newLinkItem(ep, c, nm, node))
 		}
 	}
 	for _, n := range d.Nodes {
@@ -241,7 +275,7 @@ func (a *App) clientLinks(d *Data, c *Client, includeDisabled bool) []linkItem {
 		}
 		for _, ep := range n.Inbounds {
 			nm := formatName(d.Sub.NameFormat, c.Name, n.Name, ep.Remark)
-			out = append(out, linkItem{Name: nm, Link: buildLink(ep, c, nm), Protocol: ep.Protocol, Node: n.Name, Inbound: ep.Remark, Network: ep.Network, Security: ep.Security, ep: ep})
+			out = append(out, newLinkItem(ep, c, nm, n.Name))
 		}
 	}
 	out = append(out, externalLinks(d.Sub.ExternalLinks, c)...)
@@ -412,8 +446,32 @@ func buildLink(ep NodeInbound, c *Client, remark string) string {
 			q2.Set("obfs-password", ep.ObfsPassword)
 		}
 		return "hysteria2://" + url.PathEscape(c.Password) + "@" + hp + "/?" + q2.Encode() + "#" + esc(remark)
+	case "tuic":
+		// format understood by sing-box based apps, v2rayN, NekoBox, Hiddify, Karing
+		q2 := url.Values{}
+		if ep.SNI != "" {
+			q2.Set("sni", ep.SNI)
+		}
+		q2.Set("alpn", strings.Join(orStrings(ep.ALPN, []string{"h3"}), ","))
+		q2.Set("congestion_control", orDefault(ep.TUICCongestion, "bbr"))
+		q2.Set("udp_relay_mode", orDefault(ep.TUICUDPMode, "native"))
+		if ep.TUICZeroRTT {
+			q2.Set("reduce_rtt", "1")
+		}
+		if ep.AllowInsecure {
+			q2.Set("allow_insecure", "1")
+			q2.Set("insecure", "1")
+		}
+		return "tuic://" + c.UUID + ":" + url.PathEscape(c.Password) + "@" + hp + "?" + q2.Encode() + "#" + esc(remark)
 	}
-	return ""
+	return "" // amneziawg / masque: full configs only (see linkItem.Config)
+}
+
+func orStrings(v, def []string) []string {
+	if len(v) == 0 {
+		return def
+	}
+	return v
 }
 
 // ---------- xray client outbound (JSON subscription) ----------
@@ -450,8 +508,11 @@ func clientOutbound(ep NodeInbound, c *Client, tag string) M {
 	case "hysteria2":
 		ob["protocol"] = "hysteria"
 		ob["settings"] = M{"version": 2, "address": ep.Host, "port": ep.Port}
+	case "masque":
+		ob["protocol"] = "masque"
+		ob["settings"] = M{"address": ep.Host, "port": ep.Port, "remoteDNS": []string{"1.1.1.1", "8.8.8.8"}}
 	default:
-		return nil
+		return nil // tuic / amneziawg have no xray client
 	}
 	ss := M{}
 	network := orDefault(ep.Network, "tcp")
@@ -461,6 +522,10 @@ func clientOutbound(ep NodeInbound, c *Client, tag string) M {
 		if ep.ObfsPassword != "" {
 			ss["finalmask"] = M{"udp": []any{M{"type": "salamander", "settings": M{"password": ep.ObfsPassword}}}}
 		}
+	}
+	if ep.Protocol == "masque" {
+		network = "masque"
+		ss["masqueSettings"] = M{"path": orDefault(ep.Path, masqueDefaultPath), "user": c.Name, "pass": c.Password}
 	}
 	ss["network"] = network
 	switch network {
@@ -490,6 +555,13 @@ func clientOutbound(ep NodeInbound, c *Client, tag string) M {
 		}
 		if ep.Protocol == "hysteria2" {
 			t["alpn"] = []string{"h3"}
+		} else if ep.Protocol == "masque" {
+			// the client uses HTTP/2 only when h3 is not offered
+			if _, h3 := masqueVersions(ep.ALPN); h3 {
+				t["alpn"] = []string{"h3"}
+			} else {
+				t["alpn"] = []string{"h2"}
+			}
 		} else if len(ep.ALPN) > 0 {
 			t["alpn"] = ep.ALPN
 		}

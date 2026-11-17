@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/netip"
 	"regexp"
 	"strconv"
 	"strings"
@@ -52,7 +53,7 @@ func portFree(port int, proto string) bool {
 func randomFreePort(d *Data) int {
 	for i := 0; i < 200; i++ {
 		p := 10000 + int(randInt(50000))
-		if portUsedByPanel(d, p, "") == "" && portFree(p, "tcp") {
+		if portUsedByPanel(d, p, "") == "" && portFree(p, "tcp") && portFree(p, "udp") {
 			return p
 		}
 	}
@@ -71,6 +72,26 @@ func randInt(n int64) int64 {
 
 // portUsedByPanel returns a description if the port is used by the panel or another inbound.
 func portUsedByPanel(d *Data, port int, exceptID string) string {
+	return portUsedByPanelL4(d, port, exceptID, "both")
+}
+
+// portUsedByPanelL4 is portUsedByPanel for a listener of the given kind
+// (tcp, udp or both): a TCP and a UDP service may share a port number.
+func portUsedByPanelL4(d *Data, port int, exceptID, l4 string) string {
+	if !l4Overlap(l4, "tcp") {
+		for _, in := range d.Inbounds {
+			if in.ID != exceptID && in.Port == port && l4Overlap(inboundL4(in), l4) {
+				return "порт занят инбаундом «" + in.Remark + "»"
+			}
+		}
+		if d.Settings.BridgePort == port {
+			return "служебный порт моста TUIC/AmneziaWG"
+		}
+		return ""
+	}
+	if d.Settings.BridgePort > 0 && port == d.Settings.BridgePort {
+		return "служебный порт моста TUIC/AmneziaWG"
+	}
 	if port == d.Settings.PanelPort {
 		return "порт занят панелью"
 	}
@@ -81,7 +102,7 @@ func portUsedByPanel(d *Data, port int, exceptID string) string {
 		return "служебный порт API xray"
 	}
 	for _, in := range d.Inbounds {
-		if in.ID != exceptID && in.Port == port {
+		if in.ID != exceptID && in.Port == port && l4Overlap(inboundL4(in), l4) {
 			return "порт занят инбаундом «" + in.Remark + "»"
 		}
 	}
@@ -111,16 +132,18 @@ type inboundView struct {
 	Online      int              `json:"online"`
 	ClientNames []map[string]any `json:"clientList"`
 	CertName    string           `json:"certName"`
+	EmbError    string           `json:"embError,omitempty"` // TUIC / AmneziaWG failed to start
 }
 
 func (a *App) apiInbounds(w http.ResponseWriter, r *http.Request) error {
 	now := nowMs()
 	var res []inboundView
 	var ports []int
+	embErr := a.embeddedErrors()
 	a.Store.Read(func(d *Data) {
 		for _, in := range d.Inbounds {
 			cp := *in
-			v := inboundView{Inbound: &cp, ClientNames: []map[string]any{}}
+			v := inboundView{Inbound: &cp, ClientNames: []map[string]any{}, EmbError: embErr[in.ID]}
 			for _, c := range d.Clients {
 				if c.HasInbound(in.ID) {
 					v.Clients++
@@ -148,7 +171,7 @@ func (a *App) apiInbounds(w http.ResponseWriter, r *http.Request) error {
 func (a *App) normalizeInbound(d *Data, in *Inbound, isNew bool) error {
 	in.Protocol = strings.ToLower(strings.TrimSpace(in.Protocol))
 	switch in.Protocol {
-	case "vless", "vmess", "trojan", "shadowsocks", "hysteria2":
+	case "vless", "vmess", "trojan", "shadowsocks", "hysteria2", "tuic", "amneziawg", "masque":
 	default:
 		return errf(400, "Неизвестный протокол")
 	}
@@ -162,7 +185,7 @@ func (a *App) normalizeInbound(d *Data, in *Inbound, isNew bool) error {
 	if in.Port < 1 || in.Port > 65535 {
 		return errf(400, "Порт должен быть от 1 до 65535")
 	}
-	if msg := portUsedByPanel(d, in.Port, in.ID); msg != "" {
+	if msg := portUsedByPanelL4(d, in.Port, in.ID, inboundL4(in)); msg != "" {
 		return errf(409, "Порт %d: %s", in.Port, msg)
 	}
 	if in.Tag == "" {
@@ -207,6 +230,80 @@ func (a *App) normalizeInbound(d *Data, in *Inbound, isNew bool) error {
 	case "hysteria2":
 		in.Network = "tcp"
 		in.Security = "tls"
+	case "tuic":
+		in.Network = "tcp"
+		in.Security = "tls"
+		switch in.TUICCongestion {
+		case "":
+			in.TUICCongestion = "bbr"
+		case "bbr", "cubic", "new_reno":
+		default:
+			return errf(400, "TUIC: контроль перегрузки — bbr, cubic или new_reno")
+		}
+		switch in.TUICUDPMode {
+		case "":
+			in.TUICUDPMode = "native"
+		case "native", "quic":
+		default:
+			return errf(400, "TUIC: режим UDP — native или quic")
+		}
+		in.ALPN = uniqStrings(in.ALPN)
+		if len(in.ALPN) == 0 {
+			in.ALPN = []string{"h3"}
+		}
+	case "masque":
+		in.Network = "tcp"
+		in.Security = "tls"
+		in.ALPN = masqueALPN(in.ALPN)
+		if in.Path == "" {
+			in.Path = masqueDefaultPath
+		}
+		if !strings.HasPrefix(in.Path, "/") || strings.ContainsAny(in.Path, "{} ") {
+			return errf(400, "MASQUE: путь должен начинаться с / (без пробелов и фигурных скобок)")
+		}
+		if in.MTU != 0 && (in.MTU < 1280 || in.MTU > 65535) {
+			return errf(400, "MASQUE: MTU от 1280 до 65535 (0 — по умолчанию)")
+		}
+		pool := []string{}
+		v4, v6 := 0, 0
+		for _, p := range in.MasquePool {
+			p = strings.TrimSpace(p)
+			if p == "" {
+				continue
+			}
+			pf, err := netip.ParsePrefix(p)
+			if err != nil {
+				return errf(400, "MASQUE: адрес %q — нужен вид 10.14.0.1/24 или fd14::1/64", p)
+			}
+			if pf.Addr().Is4() {
+				v4++
+			} else {
+				v6++
+			}
+			pool = append(pool, pf.String())
+		}
+		if v4 > 1 || v6 > 1 {
+			return errf(400, "MASQUE: не больше одной IPv4 и одной IPv6 подсети")
+		}
+		if len(pool) == 0 {
+			pool = append(pool, defaultMasquePool...)
+		}
+		in.MasquePool = pool
+	case "amneziawg":
+		in.Network = "tcp"
+		in.Security = "none"
+		if err := normalizeAWG(in); err != nil {
+			return err
+		}
+		for _, o := range d.Inbounds {
+			if o.ID != in.ID && o.Protocol == "amneziawg" && o.AWG != nil {
+				a, _ := netip.ParsePrefix(o.AWG.Network)
+				b, _ := netip.ParsePrefix(in.AWG.Network)
+				if a.Overlaps(b) {
+					return errf(400, "AmneziaWG: подсеть %s пересекается с инбаундом «%s»", in.AWG.Network, o.Remark)
+				}
+			}
+		}
 	case "vmess":
 		if in.Security == "reality" {
 			return errf(400, "VMess не поддерживает Reality — выберите TLS или без защиты")
@@ -268,13 +365,35 @@ func (a *App) normalizeInbound(d *Data, in *Inbound, isNew bool) error {
 	if in.Network == "grpc" && in.ServiceName == "" {
 		in.ServiceName = RandomString(10)
 	}
-	if (in.Network == "ws" || in.Network == "xhttp" || in.Network == "httpupgrade") && (in.Path == "" || in.Path == "/") && isNew {
+	if in.Protocol != "masque" && (in.Network == "ws" || in.Network == "xhttp" || in.Network == "httpupgrade") && (in.Path == "" || in.Path == "/") && isNew {
 		in.Path = "/" + RandomString(10)
 	}
 	if in.Path != "" && !strings.HasPrefix(in.Path, "/") {
 		in.Path = "/" + in.Path
 	}
 	in.ALPN = uniqStrings(in.ALPN)
+	if in.Protocol != "masque" && in.Protocol != "amneziawg" {
+		in.MTU = 0
+		in.MasquePool = nil
+	}
+	if in.Protocol != "amneziawg" {
+		in.AWG = nil
+	}
+	if in.Protocol != "tuic" {
+		in.TUICCongestion, in.TUICUDPMode, in.TUICZeroRTT = "", "", false
+	}
+	return nil
+}
+
+// checkPortsFree verifies the OS-level ports an inbound needs.
+func checkPortsFree(in *Inbound) error {
+	l4 := inboundL4(in)
+	if l4Overlap(l4, "tcp") && !portFree(in.Port, "tcp") {
+		return errf(409, "Порт %d уже занят другой программой на сервере", in.Port)
+	}
+	if l4Overlap(l4, "udp") && !portFree(in.Port, "udp") {
+		return errf(409, "UDP-порт %d уже занят другой программой на сервере", in.Port)
+	}
 	return nil
 }
 
@@ -296,11 +415,8 @@ func (a *App) apiInboundCreate(w http.ResponseWriter, r *http.Request) error {
 		if err := a.normalizeInbound(d, &in, true); err != nil {
 			return err
 		}
-		if !portFree(in.Port, "tcp") && in.Protocol != "hysteria2" {
-			return errf(409, "Порт %d уже занят другой программой на сервере", in.Port)
-		}
-		if in.Protocol == "hysteria2" && !portFree(in.Port, "udp") {
-			return errf(409, "UDP-порт %d уже занят другой программой на сервере", in.Port)
+		if err := checkPortsFree(&in); err != nil {
+			return err
 		}
 		d.Inbounds = append(d.Inbounds, &in)
 		if grantAll {
@@ -315,8 +431,14 @@ func (a *App) apiInboundCreate(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	if err := a.Xray.Apply(); err != nil {
-		// roll back the inbound if xray rejects it
+	err = a.Xray.Apply()
+	if err == nil {
+		if e := a.embeddedErrors()[created.ID]; e != "" {
+			err = fmt.Errorf("%s не запустился: %s", protoTitle(created.Protocol), e)
+		}
+	}
+	if err != nil {
+		// roll back the inbound if xray (or the embedded server) rejects it
 		a.Store.Update(func(d *Data) error {
 			for i, x := range d.Inbounds {
 				if x.ID == created.ID {
@@ -355,12 +477,32 @@ func (a *App) apiInboundUpdate(w http.ResponseWriter, r *http.Request) error {
 		req.Up, req.Down = in.Up, in.Down
 		req.Enabled = in.Enabled
 		req.Sniffing = true
+		if strings.EqualFold(req.Protocol, "amneziawg") && in.AWG != nil {
+			// keep the server key unless a new one was given explicitly
+			if req.AWG == nil {
+				cp := *in.AWG
+				req.AWG = &cp
+			} else if strings.TrimSpace(req.AWG.PrivateKey) == "" {
+				req.AWG.PrivateKey = in.AWG.PrivateKey
+			}
+		}
 		if req.Port != in.Port || req.Protocol != in.Protocol {
 			if err := a.normalizeInbound(d, &req, false); err != nil {
 				return err
 			}
-			if req.Port != in.Port && !portFree(req.Port, "tcp") {
+			// only listeners the old inbound did not already hold are checked
+			nl := inboundL4(&req)
+			needTCP, needUDP := l4Overlap(nl, "tcp"), l4Overlap(nl, "udp")
+			if req.Port == in.Port {
+				ol := inboundL4(in)
+				needTCP = needTCP && !l4Overlap(ol, "tcp")
+				needUDP = needUDP && !l4Overlap(ol, "udp")
+			}
+			if needTCP && !portFree(req.Port, "tcp") {
 				return errf(409, "Порт %d уже занят другой программой на сервере", req.Port)
+			}
+			if needUDP && !portFree(req.Port, "udp") {
+				return errf(409, "UDP-порт %d уже занят другой программой на сервере", req.Port)
 			}
 		} else if err := a.normalizeInbound(d, &req, false); err != nil {
 			return err
@@ -372,7 +514,13 @@ func (a *App) apiInboundUpdate(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	if err := a.Xray.Apply(); err != nil {
+	err = a.Xray.Apply()
+	if err == nil {
+		if e := a.embeddedErrors()[id]; e != "" {
+			err = fmt.Errorf("%s не запустился: %s", protoTitle(req.Protocol), e)
+		}
+	}
+	if err != nil {
 		a.Store.Update(func(d *Data) error {
 			if in := d.InboundByID(id); in != nil {
 				*in = backup
@@ -589,7 +737,11 @@ func (a *App) apiInboundExampleLink(w http.ResponseWriter, r *http.Request) erro
 			c = &Client{Name: "example", UUID: NewUUID(), Password: RandomString(16)}
 		}
 		ep := a.publicInbound(d, in)
-		link = buildLink(ep, c, formatName(d.Sub.NameFormat, c.Name, d.Settings.NodeName, in.Remark))
+		li := newLinkItem(ep, c, formatName(d.Sub.NameFormat, c.Name, d.Settings.NodeName, in.Remark), d.Settings.NodeName)
+		link = li.Link
+		if link == "" {
+			link = li.Config
+		}
 	})
 	if link == "" {
 		return errf(404, "Инбаунд не найден")
@@ -612,14 +764,18 @@ func (a *App) apiPortCheck(w http.ResponseWriter, r *http.Request) error {
 	}
 	var msg string
 	var ownPort bool
+	l4 := "tcp"
+	if p := r.URL.Query().Get("protocol"); p != "" {
+		l4 = inboundL4(&Inbound{Protocol: p, ALPN: strings.Split(r.URL.Query().Get("alpn"), ",")})
+	}
 	a.Store.Read(func(d *Data) {
-		msg = portUsedByPanel(d, port, except)
-		if in := d.InboundByID(except); in != nil && in.Port == port {
+		msg = portUsedByPanelL4(d, port, except, l4)
+		if in := d.InboundByID(except); in != nil && in.Port == port && l4Overlap(inboundL4(in), l4) {
 			ownPort = true
 		}
 	})
 	free := msg == ""
-	if free && !ownPort && !portFree(port, "tcp") {
+	if free && !ownPort && ((l4Overlap(l4, "tcp") && !portFree(port, "tcp")) || (l4Overlap(l4, "udp") && !portFree(port, "udp"))) {
 		free = false
 		msg = "порт занят другой программой на сервере"
 	}

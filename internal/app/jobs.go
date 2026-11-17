@@ -107,8 +107,8 @@ func (a *App) pollStats() {
 		case "user":
 			m = users
 		case "inbound":
-			if p[1] == "api" {
-				continue
+			if p[1] == "api" || p[1] == bridgeTag {
+				continue // bridge traffic is counted per embedded inbound below
 			}
 			m = inbounds
 		case "outbound":
@@ -146,7 +146,8 @@ func (a *App) pollStats() {
 	a.rt.lastStatsAt = now
 	a.rt.statsErr = ""
 	a.rt.Unlock()
-	if len(users) == 0 && len(inbounds) == 0 {
+	emb := a.takeEmbeddedTraffic()
+	if len(users) == 0 && len(inbounds) == 0 && len(emb) == 0 {
 		return
 	}
 	limitHit := false
@@ -179,6 +180,13 @@ func (a *App) pollStats() {
 			}
 			total += v.up + v.down
 		}
+		for id, v := range emb {
+			if in := d.InboundByID(id); in != nil {
+				in.Up += v[0]
+				in.Down += v[1]
+			}
+			total += v[0] + v[1]
+		}
 		d.Daily[day] += total
 		if len(d.Daily) > 400 {
 			keys := sortedKeys(d.Daily)
@@ -198,6 +206,33 @@ func (a *App) pollStats() {
 
 func (a *App) pollOnline() {
 	ips, err := a.Xray.OnlineIPs()
+	if err == nil {
+		// bridged clients show up as 127.0.0.1 — use the real addresses
+		// reported by the embedded servers instead
+		if ips == nil {
+			ips = map[string][]string{}
+		}
+		for name, l := range ips {
+			out := l[:0]
+			for _, ip := range l {
+				if ip != "127.0.0.1" && ip != "::1" {
+					out = append(out, ip)
+				}
+			}
+			if len(out) == 0 {
+				delete(ips, name)
+			} else {
+				ips[name] = out
+			}
+		}
+		for name, l := range a.embeddedOnline() {
+			for _, ip := range l {
+				if !containsStr(ips[name], ip) {
+					ips[name] = append(ips[name], ip)
+				}
+			}
+		}
+	}
 	a.rt.Lock()
 	if err != nil || ips == nil {
 		a.rt.ipSupported = err == nil

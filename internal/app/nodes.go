@@ -25,6 +25,8 @@ type syncClient struct {
 	ExpiresAt   int64  `json:"expiresAt"`
 	DeviceLimit int    `json:"deviceLimit"`
 	Active      bool   `json:"active"`
+	WGKey       string `json:"wgKey,omitempty"`
+	WGIndex     int    `json:"wgIndex,omitempty"`
 }
 
 type syncPayload struct {
@@ -206,12 +208,17 @@ func (a *App) apiNodeSyncIn(w http.ResponseWriter, r *http.Request) error {
 				changed = true
 			}
 			if c.UUID != sc.UUID || c.Name != name || c.Password != sc.Password || c.ExpiresAt != sc.ExpiresAt ||
-				c.DeviceLimit != sc.DeviceLimit || c.Banned != !sc.Active || strings.Join(c.Inbounds, ",") != strings.Join(grant, ",") {
+				c.DeviceLimit != sc.DeviceLimit || c.Banned != !sc.Active || strings.Join(c.Inbounds, ",") != strings.Join(grant, ",") ||
+				(sc.WGKey != "" && (c.WGKey != sc.WGKey || c.WGIndex != sc.WGIndex)) {
 				changed = true
 			}
 			c.UUID, c.Name, c.SubID, c.Password, c.ExpiresAt, c.DeviceLimit = sc.UUID, name, sc.SubID, sc.Password, sc.ExpiresAt, sc.DeviceLimit
 			c.Banned = !sc.Active
 			c.Inbounds = append([]string{}, grant...)
+			if sc.WGKey != "" {
+				// AmneziaWG: the same key and tunnel address on every server
+				c.WGKey, c.WGIndex = sc.WGKey, sc.WGIndex
+			}
 		}
 		kept := d.Clients[:0]
 		for _, c := range d.Clients {
@@ -320,7 +327,7 @@ func (a *App) syncNodesNow() {
 			}
 			st := c.Status(now)
 			payload.Clients = append(payload.Clients, syncClient{ID: c.ID, UUID: c.UUID, Name: c.Name, SubID: c.SubID, Password: c.Password,
-				ExpiresAt: c.ExpiresAt, DeviceLimit: c.DeviceLimit, Active: st == StActive})
+				ExpiresAt: c.ExpiresAt, DeviceLimit: c.DeviceLimit, Active: st == StActive, WGKey: c.WGKey, WGIndex: c.WGIndex})
 		}
 	})
 	if len(targets) == 0 {

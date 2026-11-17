@@ -43,11 +43,5 @@ func inboundFirewallProto(in *Inbound) string {
 	if in.Listen == "127.0.0.1" || in.Listen == "::1" || in.Listen == "localhost" {
 		return "none" // local-only inbound (e.g. behind the decoy site)
 	}
-	if in.Protocol == "hysteria2" {
-		return "udp"
-	}
-	if in.Protocol == "shadowsocks" {
-		return "both"
-	}
-	return "tcp"
+	return inboundL4(in)
 }
