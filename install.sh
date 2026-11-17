@@ -3,15 +3,23 @@
 #   install:   bash <(curl -fsSL https://raw.githubusercontent.com/200iq-creature/KVK-panel/main/install.sh)
 #   update:    curl -fsSL https://raw.githubusercontent.com/200iq-creature/KVK-panel/main/install.sh | bash -s -- update
 #   uninstall: curl -fsSL https://raw.githubusercontent.com/200iq-creature/KVK-panel/main/install.sh | bash -s -- uninstall
-# Environment overrides: KVK_PORT, KVK_USER, KVK_PASS, KVK_PATH, KVK_XRAY_VERSION, KVK_FROM_SOURCE=1
+#   branch:    curl -fsSL https://raw.githubusercontent.com/200iq-creature/KVK-panel/main/install.sh | bash -s -- update BRANCH
+#              (the branch is remembered: later `kvk update` and the panel button keep using it;
+#               `kvk update main` switches back)
+# Environment overrides: KVK_PORT, KVK_USER, KVK_PASS, KVK_PATH, KVK_XRAY_VERSION, KVK_FROM_SOURCE=1, KVK_BRANCH
 set -euo pipefail
 
 REPO="200iq-creature/KVK-panel"
-BRANCH="${KVK_BRANCH:-main}"
 INSTALL_DIR="/usr/local/kvk-panel"
 BIN="$INSTALL_DIR/kvk-panel"
 XRAY_DIR="$INSTALL_DIR/bin"
 DATA_DIR="/etc/kvk-panel"
+BRANCH_FILE="$DATA_DIR/branch"
+# branch priority: `update BRANCH` argument > KVK_BRANCH > remembered branch > main
+BRANCH="${KVK_BRANCH:-}"
+[ -n "$BRANCH" ] || BRANCH="$(tr -d ' \n\r' 2>/dev/null <"$BRANCH_FILE" || true)"
+if [ "${1:-}" = "update" ] || [ "${1:-}" = "install" ]; then [ -n "${2:-}" ] && BRANCH="$2"; fi
+BRANCH="${BRANCH:-main}"
 SERVICE="kvk-panel"
 GO_VERSION="1.25.5"
 
@@ -20,6 +28,10 @@ green() { printf '\033[32m%s\033[0m\n' "$*"; }
 yellow() { printf '\033[33m%s\033[0m\n' "$*"; }
 bold() { printf '\033[1m%s\033[0m\n' "$*"; }
 die() { red "Ошибка: $*"; exit 1; }
+
+case "$BRANCH" in
+  *[!A-Za-z0-9._/-]* | "" | -*) die "недопустимое имя ветки: $BRANCH" ;;
+esac
 
 [ "$(id -u)" -eq 0 ] || die "запустите от root (sudo -i)"
 [ "$(uname -s)" = "Linux" ] || die "поддерживается только Linux"
@@ -83,7 +95,7 @@ build_from_source() {
   local tmp goarch="$ARCH" goarm=""
   [ "$ARCH" = "armv7" ] && goarch=arm && goarm=7
   tmp="$(mktemp -d)"
-  yellow "Релиз не найден — собираем из исходников (1–3 минуты)…"
+  yellow "Собираем из исходников ветки $BRANCH (1–3 минуты)…"
   local gotar="go${GO_VERSION}.linux-${goarch/arm/armv6l}.tar.gz"
   [ "$goarch" = "arm64" ] && gotar="go${GO_VERSION}.linux-arm64.tar.gz"
   curl -fL --progress-bar --max-time 600 -o "$tmp/go.tgz" "https://go.dev/dl/$gotar" ||
@@ -91,7 +103,7 @@ build_from_source() {
     die "не удалось скачать Go"
   tar -xzf "$tmp/go.tgz" -C "$tmp"
   curl -fL --progress-bar --max-time 300 -o "$tmp/src.tgz" "https://codeload.github.com/$REPO/tar.gz/refs/heads/$BRANCH" ||
-    die "не удалось скачать исходники"
+    die "не удалось скачать исходники ветки $BRANCH (есть ли такая ветка?)"
   mkdir -p "$tmp/src"
   tar -xzf "$tmp/src.tgz" -C "$tmp/src" --strip-components=1
   local ver
@@ -99,17 +111,35 @@ build_from_source() {
   (
     cd "$tmp/src"
     export PATH="$tmp/go/bin:$PATH" GOPATH="$tmp/gopath" GOCACHE="$tmp/gocache" GOFLAGS=-mod=mod CGO_ENABLED=0 GOOS=linux GOARCH="$goarch" GOARM="$goarm"
-    go build -trimpath -ldflags "-s -w -X github.com/200iq-creature/KVK-panel/internal/app.Version=$ver" -o "$tmp/kvk-panel" ./cmd/kvk-panel
+    go build -trimpath -ldflags "-s -w -X github.com/200iq-creature/KVK-panel/internal/app.Version=$ver -X github.com/200iq-creature/KVK-panel/internal/app.Branch=$BRANCH" -o "$tmp/kvk-panel" ./cmd/kvk-panel
   ) || die "сборка не удалась"
   install -m 0755 "$tmp/kvk-panel" "$1"
   rm -rf "$tmp"
-  green "Собрана версия $ver"
+  green "Собрана версия $ver (ветка $BRANCH)"
+}
+
+# remote_version — VERSION file of the selected branch
+remote_version() {
+  curl -fsSL --max-time 15 "https://raw.githubusercontent.com/$REPO/$BRANCH/VERSION" 2>/dev/null | tr -d ' \n\r' || true
 }
 
 fetch_binary() {
-  local dest="$1"
-  if [ "${KVK_FROM_SOURCE:-0}" != "1" ] && download_release "$dest"; then return 0; fi
+  local dest="$1" tag want
+  # releases are cut from main only; other branches are always built from source
+  if [ "${KVK_FROM_SOURCE:-0}" != "1" ] && [ "$BRANCH" = "main" ]; then
+    tag="$(latest_tag)"
+    want="$(remote_version)"
+    # use the release only when it is not older than the code in main
+    if [ -n "$tag" ] && { [ -z "$want" ] || [ "${tag#v}" = "$want" ]; } && download_release "$dest"; then
+      return 0
+    fi
+  fi
   build_from_source "$dest"
+}
+
+save_branch() {
+  mkdir -p "$DATA_DIR"
+  echo "$BRANCH" >"$BRANCH_FILE"
 }
 
 random_port() {
@@ -183,6 +213,7 @@ yellow() { printf '\033[33m%s\033[0m\n' "$*"; }
 [ "$(id -u)" -eq 0 ] || { red "Запустите от root"; exit 1; }
 
 status_line() {
+  echo "KVK Panel v$("$BIN" version 2>/dev/null || echo '?') · ветка $(cat "$DATA/branch" 2>/dev/null || echo main)"
   if systemctl is-active --quiet $SVC; then green "Панель: работает"; else red "Панель: остановлена"; fi
   if pgrep -f "$XBIN/xray" >/dev/null 2>&1; then green "Xray:   работает ($("$XBIN/xray" version 2>/dev/null | head -1 | awk '{print $2}'))"; else yellow "Xray:   не запущен"; fi
   if systemctl is-enabled --quiet $SVC 2>/dev/null; then echo "Автозапуск: включён"; else echo "Автозапуск: выключен"; fi
@@ -215,7 +246,14 @@ enable_bbr() {
   if sysctl net.ipv4.tcp_congestion_control | grep -q bbr; then green "BBR включён"; else red "Ядро не поддерживает BBR"; fi
 }
 
-update_panel() { bash <(curl -fsSL "https://raw.githubusercontent.com/$REPO/main/install.sh") update; }
+# kvk update [BRANCH] — without an argument the remembered branch is used
+update_panel() {
+  local b="${1:-$(tr -d ' \n\r' 2>/dev/null <"$DATA/branch")}"
+  b="${b:-main}"
+  echo "Ветка: $b"
+  curl -fsSL "https://raw.githubusercontent.com/$REPO/$b/install.sh" -o /tmp/kvk-install.sh || { red "Не удалось скачать install.sh ветки $b"; return 1; }
+  bash /tmp/kvk-install.sh update "$b"
+}
 
 uninstall() {
   read -rp "Удалить панель, Xray и все данные (клиенты, настройки)? Введите yes: " a
@@ -315,7 +353,8 @@ case "${1:-}" in
   enable | disable) systemctl "$1" $SVC ;;
   log | logs) journalctl -u $SVC -n 200 --no-pager -f ;;
   info) P info ;;
-  update) update_panel ;;
+  update) shift; update_panel "${1:-}" ;;
+  version) "$BIN" version ;;
   uninstall) uninstall ;;
   xray) shift; offline xray-install "${1:-latest}" ;;
   geo) shift; offline geo-update "$@" ;;
@@ -330,7 +369,8 @@ case "${1:-}" in
   log             журнал панели
   info            адрес и логин
   reset           сбросить логин и пароль
-  update          обновить панель
+  update [ВЕТКА]  обновить панель (ветка запоминается, по умолчанию main)
+  version         версия панели
   xray [VER]      установить версию Xray
   geo [SRC]       обновить geo-файлы
   backup          создать бэкап
@@ -358,6 +398,7 @@ do_install() {
   mkdir -p "$INSTALL_DIR" "$XRAY_DIR" "$DATA_DIR"
   chmod 700 "$DATA_DIR"
   fetch_binary "$BIN"
+  save_branch
 
   local port user pass path
   port="${KVK_PORT:-$(random_port)}"
@@ -411,8 +452,10 @@ do_update() {
   old="$("$BIN" version 2>/dev/null || echo '?')"
   P backup >/dev/null 2>&1 && echo "Бэкап перед обновлением создан" || true
   tmp="$(mktemp)"
+  echo "Текущая версия: $old · ветка: $BRANCH"
   fetch_binary "$tmp"
   new="$("$tmp" version 2>/dev/null || echo '?')"
+  save_branch
   systemctl stop $SERVICE 2>/dev/null || true
   cp -f "$BIN" "$BIN.prev" 2>/dev/null || true
   install -m 0755 "$tmp" "$BIN"
@@ -428,7 +471,11 @@ do_update() {
     systemctl start $SERVICE
     exit 1
   fi
-  green "Готово: $old → $new"
+  if [ "$old" = "$new" ]; then
+    yellow "Версия не изменилась: $new (ветка $BRANCH) — в ветке нет новых изменений"
+  else
+    green "Готово: $old → $new (ветка $BRANCH)"
+  fi
   P info
 }
 

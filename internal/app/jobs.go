@@ -490,7 +490,7 @@ func (a *App) autoUpdateCheck() {
 	if st.LastUpdateCheck > 0 && time.Since(time.UnixMilli(st.LastUpdateCheck)) < 12*time.Hour {
 		return
 	}
-	latest, err := fetchLatestPanelVersion()
+	latest, err := fetchLatestPanelVersion(a.UpdateBranch())
 	a.Store.Update(func(d *Data) error {
 		d.Settings.LastUpdateCheck = nowMs()
 		if err == nil {

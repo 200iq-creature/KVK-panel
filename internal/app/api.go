@@ -362,7 +362,7 @@ func (a *App) apiMe(w http.ResponseWriter, r *http.Request) error {
 	authed := a.checkSession(r)
 	var user, node string
 	a.Store.Read(func(d *Data) { user = d.Admin.Username; node = d.Settings.NodeName })
-	res := map[string]any{"authed": authed, "version": Version, "node": node}
+	res := map[string]any{"authed": authed, "version": Version, "branch": Branch, "node": node}
 	if authed {
 		res["user"] = user
 	}
@@ -397,6 +397,7 @@ func (a *App) apiMeta(w http.ResponseWriter, r *http.Request) error {
 		res["main"] = d.Main
 	})
 	res["version"] = Version
+	res["branch"] = Branch
 	res["xray"] = a.Xray.Status()
 	ok(w, res)
 	return nil

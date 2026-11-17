@@ -12,7 +12,12 @@ import (
 	"time"
 )
 
-var Version = "1.0.0"
+// Version is set at build time from the VERSION file (-ldflags -X); keep the
+// default in sync with VERSION for plain `go build`.
+var Version = "1.0.1"
+
+// Branch is the git branch the binary was built from (-ldflags -X).
+var Branch = "main"
 
 const RepoSlug = "200iq-creature/KVK-panel"
 
