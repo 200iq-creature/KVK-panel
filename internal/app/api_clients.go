@@ -389,12 +389,42 @@ func clientAction(d *Data, c *Client, action string, days float64, tag string) e
 	return nil
 }
 
+// clientAccess gives or takes inbounds (of this server or linked ones).
+func clientAccess(d *Data, c *Client, on bool, ids []string) error {
+	if len(ids) == 0 {
+		return errf(400, "Не выбран инбаунд")
+	}
+	known := map[string]bool{}
+	for _, in := range d.Inbounds {
+		known[in.ID] = true
+	}
+	for _, n := range d.Nodes {
+		for _, id := range n.InboundIDs() {
+			known[id] = true
+		}
+	}
+	for _, id := range ids {
+		if on {
+			if !known[id] {
+				return errf(404, "Инбаунд не найден — обновите страницу")
+			}
+			if !c.HasInbound(id) {
+				c.Inbounds = append(c.Inbounds, id)
+			}
+		} else {
+			c.Inbounds = removeStr(c.Inbounds, id)
+		}
+	}
+	return nil
+}
+
 func (a *App) apiClientAction(w http.ResponseWriter, r *http.Request) error {
 	id := r.PathValue("id")
 	var req struct {
-		Action string  `json:"action"`
-		Days   float64 `json:"days"`
-		Tag    string  `json:"tag"`
+		Action  string   `json:"action"`
+		Days    float64  `json:"days"`
+		Tag     string   `json:"tag"`
+		Inbound []string `json:"inbounds"` // grant / revoke: inbound ids («node:id» for linked servers)
 	}
 	if err := readJSON(r, &req); err != nil {
 		return err
@@ -403,6 +433,14 @@ func (a *App) apiClientAction(w http.ResponseWriter, r *http.Request) error {
 		c := d.ClientByID(id)
 		if c == nil {
 			return errf(404, "Клиент не найден")
+		}
+		switch req.Action {
+		case "grant", "revoke":
+			return clientAccess(d, c, req.Action == "grant", req.Inbound)
+		case "revoke-all":
+			c.Inbounds = []string{}
+			d.AddEvent("info", c.Name+": все инбаунды забраны", c.Name)
+			return nil
 		}
 		return clientAction(d, c, req.Action, req.Days, req.Tag)
 	})

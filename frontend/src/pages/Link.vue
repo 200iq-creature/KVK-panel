@@ -81,7 +81,11 @@
     </div>
     <Drawer :open="ed.open" :title="ed.node ? `Сервер «${ed.node.name}»` : ''" eyebrow="связка серверов" @close="ed.open = false">
       <div v-if="ed.node" class="col">
-        <div class="fld"><label class="lbl">Название</label><input v-model="ed.name" class="inp"></div>
+        <div class="lk-2">
+          <div class="fld"><label class="lbl">Название</label><input v-model="ed.name" class="inp"></div>
+          <div class="fld"><label class="lbl">Страна (код)</label><span class="lk-cc"><input v-model="ed.country" class="inp mono" maxlength="2" placeholder="DE" @input="ed.country = ed.country.toUpperCase().replace(/[^A-Z]/g, '')"><i>{{ flag(ed.country) }}</i></span></div>
+        </div>
+        <span class="hint lk-cch">Код из двух букв (DE, NL, FI) — флаг в подписке и в связке. Сохраняется и на самом сервере.</span>
         <TgRow v-model="ed.enabled" bold label="Сервер в связке" hint="выключенный сервер не синхронизируется, его конфиги пропадают из подписок" />
         <div class="fld"><label class="lbl">Ключ связки или адрес панели</label><textarea v-model="ed.url" class="inp mono" rows="3" :placeholder="ed.node.url"></textarea><span class="hint">Пусто — оставить адрес <span class="i-mono">{{ ed.node.url }}</span>. Вставьте ключ нового сервера (<code>kvk apikey</code> на нём), если старый заблокирован, — затем восстановите на нём конфигурацию.</span></div>
         <div v-if="!ed.url.trim() || ed.url.trim().startsWith('http')" class="fld"><label class="lbl">API-токен</label><input v-model="ed.token" class="inp mono" placeholder="пусто — оставить текущий"></div>
@@ -134,7 +138,10 @@
       <div class="col">
         <div class="fld"><label class="lbl">Ключ связки или адрес панели</label><textarea v-model="add.url" class="inp mono" rows="3" placeholder="ключ из «Связка серверов» второго сервера или https://IP:порт/путь/"></textarea></div>
         <div v-if="add.url.trim().startsWith('http')" class="fld"><label class="lbl">API-токен сервера</label><input v-model="add.token" class="inp mono" placeholder="Настройки → API на втором сервере"></div>
-        <div class="fld"><label class="lbl">Название</label><input v-model="add.name" class="inp" placeholder="пусто — как на сервере"></div>
+        <div class="lk-2">
+          <div class="fld"><label class="lbl">Название</label><input v-model="add.name" class="inp" placeholder="пусто — как на сервере"></div>
+          <div class="fld"><label class="lbl">Страна (код)</label><span class="lk-cc"><input v-model="add.country" class="inp mono" maxlength="2" :placeholder="add.test?.info?.country || 'как на сервере'" @input="add.country = add.country.toUpperCase().replace(/[^A-Z]/g, '')"><i>{{ flag(add.country || add.test?.info?.country) }}</i></span></div>
+        </div>
         <div v-if="add.test" class="i-hint"><Icon n="check" /><span><b>{{ flag(add.test.info.country) }} {{ add.test.info.name }}</b> отвечает · {{ add.test.pingMs }} мс · KVK {{ add.test.info.version }} · Xray {{ add.test.info.xray || '—' }} · {{ pn((add.test.info.inbounds || []).length, 'инбаунд', 'инбаунда', 'инбаундов') }}</span></div>
       </div>
       <template #foot>
@@ -162,29 +169,36 @@ import { loadMeta } from '../lib/meta.js'
 
 const { data, error, reload } = useLoad(() => get('nodes'), { interval: 15000 })
 const busy = reactive({ sync: false, test: false, add: false, ed: false, acc: false, rest: false })
-const ed = reactive({ open: false, node: null, name: '', url: '', token: '', enabled: true })
+const ed = reactive({ open: false, node: null, name: '', url: '', token: '', enabled: true, country: '' })
 const pf = reactive({ open: false, node: null, data: null, error: '', dns: true, warns: [] })
-const add = reactive({ open: false, url: '', token: '', name: '', test: null })
+const add = reactive({ open: false, url: '', token: '', name: '', country: '', test: null })
 const showKey = ref(false)
 async function sync() { busy.sync = true; try { data.value = await post('nodes/sync'); ok('Синхронизировано') } catch (e) { fail(e) } finally { busy.sync = false } }
 async function test() { busy.test = true; add.test = null; try { add.test = await post('nodes/test', { url: add.url, token: add.token }) } catch (e) { fail(e) } finally { busy.test = false } }
 async function doAdd() {
   busy.add = true
-  try { await post('nodes', { url: add.url, token: add.token, name: add.name }); ok('Сервер добавлен в связку'); Object.assign(add, { open: false, url: '', token: '', name: '', test: null }); reload(true) } catch (e) { fail(e) } finally { busy.add = false }
+  try {
+    const r = await post('nodes', { url: add.url, token: add.token, name: add.name, country: add.country })
+    if (r && r.warning) fail(r.warning); else ok('Сервер добавлен в связку')
+    Object.assign(add, { open: false, url: '', token: '', name: '', country: '', test: null }); reload(true); loadServers(true)
+  } catch (e) { fail(e) } finally { busy.add = false }
 }
-function openEdit(n) { Object.assign(ed, { open: true, node: n, name: n.name, url: '', token: '', enabled: n.enabled }) }
+function openEdit(n) { Object.assign(ed, { open: true, node: n, name: n.name, url: '', token: '', enabled: n.enabled, country: n.country || '' }) }
 async function saveEdit() {
   const b = {}
   if (ed.name.trim() && ed.name.trim() !== ed.node.name) b.name = ed.name.trim()
   if (ed.url.trim()) b.url = ed.url.trim()
   if (ed.token.trim()) b.token = ed.token.trim()
   if (ed.enabled !== ed.node.enabled) b.enabled = ed.enabled
+  if (ed.country.length === 1) return fail('Код страны — две латинские буквы, например DE')
+  if (ed.country !== (ed.node.country || '')) b.country = ed.country
   if (!Object.keys(b).length) { ed.open = false; return }
   busy.ed = true
   try {
     const r = await put('nodes/' + ed.node.id, b)
     ed.open = false; reload(true); loadServers(true)
-    if (r && r.replaced) { ok('Адрес сменён — теперь восстановите конфигурацию'); const d = await get('nodes'); data.value = d; const n = d.nodes.find(x => x.id === ed.node.id); if (n) openProf(n) } else ok('Сохранено')
+    if (r && r.warning) fail(r.warning)
+    if (r && r.replaced) { ok('Адрес сменён — теперь восстановите конфигурацию'); const d = await get('nodes'); data.value = d; const n = d.nodes.find(x => x.id === ed.node.id); if (n) openProf(n) } else if (!r || !r.warning) ok('Сохранено')
   } catch (e) { fail(e) } finally { busy.ed = false }
 }
 async function loadProf() { pf.error = ''; try { pf.data = await get(`nodes/${pf.node.id}/profile`) } catch (e) { pf.error = e.message } }
@@ -209,3 +223,10 @@ async function detach() {
   try { const r = await post('main/detach'); ok(`Отвязан, удалено клиентов: ${r.removed}`); reload(true); loadMeta() } catch (e) { fail(e) }
 }
 </script>
+<style>
+.h1 .lk-2{display:grid;grid-template-columns:minmax(0,1fr) 150px;gap:12px}
+.h1 .lk-cc{position:relative;display:block}
+.h1 .lk-cc .inp{width:100%;padding-right:40px;text-transform:uppercase}
+.h1 .lk-cc i{position:absolute;right:12px;top:50%;transform:translateY(-50%);font-style:normal;font-size:20px;line-height:1;pointer-events:none}
+.h1 .lk-cch{margin-top:-6px}
+</style>

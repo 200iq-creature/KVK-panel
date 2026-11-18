@@ -445,7 +445,7 @@ func (a *App) nodeEdited(id string) {
 // inbounds, site, filter and WARP are managed from here.
 func (a *App) apiNodeProxy(w http.ResponseWriter, r *http.Request) error {
 	id, p := r.PathValue("id"), strings.TrimLeft(r.PathValue("path"), "/")
-	for _, deny := range []string{"node/", "main/", "auth/", "nodes", "settings", "backups", "panel/", "security", "shop", "tgproxy", "migrate", "wizard"} {
+	for _, deny := range []string{"node/", "main/", "auth/", "nodes", "settings", "backups", "panel/", "security", "shop", "tgproxy", "migrate", "wizard", "inbounds-copy"} {
 		if strings.HasPrefix(p, deny) {
 			return errf(403, "Этот раздел меняется только на самом сервере")
 		}

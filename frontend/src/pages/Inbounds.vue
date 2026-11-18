@@ -82,6 +82,7 @@
                   <div class="vw-xc vw-xa">
                     <span class="vw-xt">Действия</span>
                     <button class="btn btn-sm" type="button" @click="exampleLink(i)">Скопировать пример ссылки</button>
+                    <button class="btn btn-sm" type="button" :disabled="!!i.front || i.auto === 'cdn'" :title="i.front || i.auto === 'cdn' ? 'Работает за сайтом-прикрытием — на другом сервере запустите «Автонастройку»' : 'Создать такой же инбаунд на другом сервере связки'" @click="openCopy(i)"><Icon n="copy" />Копировать на сервер</button>
                     <button class="btn btn-sm" type="button" @click="grant(i, true)">Выдать всем</button>
                     <button class="btn btn-sm btn-g" type="button" @click="grant(i, false)">Забрать у всех</button>
                     <button class="btn btn-sm btn-g vw-bad" type="button" @click="remove(i)">Удалить инбаунд</button>
@@ -97,6 +98,31 @@
         <div class="i-alrt info"><Icon n="info" /><span><b>Новый Xray не запускает VLESS без защиты к публичному серверу:</b> <span class="muted">для прямого подключения — Reality (маскировка под сайт) или TLS. После смены порта, защиты или obfs клиентам нужно обновить подписку.</span></span><router-link class="btn btn-sm" to="/sub">Настроить подписку</router-link></div>
       </template>
     </div>
+    <Drawer :open="cp.open" title="Копировать инбаунд" :sub="cp.inbound ? cp.inbound.remark : ''" eyebrow="инбаунды" @close="cp.open = false">
+      <div v-if="cp.inbound" class="col">
+        <p class="note">На выбранных серверах появится такой же инбаунд: протокол, транспорт, порт и настройки. То, что принадлежит серверу «{{ srvName }}», заменится своим: ключи Reality и AmneziaWG будут новые, маской Reality станет сайт сервера, а сертификат — домен этого сервера. Если порт там занят, будет выбран свободный. Название «{{ srvName }} …» поменяется на имя нового сервера.</p>
+        <div class="fld">
+          <label class="lbl">На какие серверы</label>
+          <div class="cpy-l">
+            <button v-for="t in copyTargets" :key="t.id || 'self'" type="button" class="cpy-s" :class="{ on: cp.to.includes(t.id), bad: t.bad }" @click="toggleTo(t.id)">
+              <span class="cpy-c"><Icon n="check" /></span>
+              <span class="cpy-n"><b>{{ t.name }}</b><small>{{ t.note }}</small></span>
+            </button>
+          </div>
+        </div>
+        <TgRow v-model="cp.grant" bold label="Выдать тем же клиентам" :hint="cp.grant ? `копия достанется тем, у кого есть «${cp.inbound.remark}» (${pn(cp.inbound.clients, 'клиент', 'клиента', 'клиентов')})` : 'копию не получит никто — выдайте её в карточке клиента'" />
+        <div v-if="cp.results.length" class="list-rows">
+          <div v-for="r in cp.results" :key="r.server + r.name" class="lr" style="flex-wrap:wrap">
+            <span class="lr-t"><b>{{ r.name || r.server }}</b><small :class="r.ok ? '' : 'bad-t'">{{ r.ok ? `создан «${r.remark}» на порту ${r.port}` : r.error }}<template v-if="r.warning"> · {{ r.warning }}</template></small></span>
+            <span class="i-stt" :class="r.ok ? (r.warning ? 'wa' : 'ok') : 'bad'">{{ r.ok ? 'готово' : 'ошибка' }}</span>
+          </div>
+        </div>
+      </div>
+      <template #foot>
+        <button class="btn" type="button" @click="cp.open = false">{{ cp.results.length ? 'Закрыть' : 'Отмена' }}</button>
+        <button class="btn btn-p" type="button" :disabled="busy.copy || !cp.to.length" @click="doCopy"><span v-if="busy.copy" class="spin"></span><Icon v-else n="copy" />Скопировать{{ cp.to.length > 1 ? ` (${cp.to.length})` : '' }}</button>
+      </template>
+    </Drawer>
     <Drawer :open="form.open" :title="form.inbound ? 'Изменить инбаунд' : 'Новый инбаунд'" :sub="form.inbound ? form.inbound.remark : ''" eyebrow="инбаунды" width="min(640px, calc(100% - 24px))" @close="form.open = false">
       <InboundForm v-if="form.open" ref="fref" :inbound="form.inbound" :edit="!!form.inbound" />
       <template #foot>
@@ -117,12 +143,13 @@ import Metric from '../components/Metric.vue'
 import Drawer from '../components/Drawer.vue'
 import InboundForm from '../components/InboundForm.vue'
 import ServerPicker from '../components/ServerPicker.vue'
+import TgRow from '../components/TgRow.vue'
 import { post } from '../lib/api.js'
 import { srv, sget as get, spost, sput as put, sdel as del, srvName, remote } from '../lib/server.js'
 import { meta, loadMeta } from '../lib/meta.js'
 import { useLoad } from '../lib/useLoad.js'
 import { ok, fail, confirm, copy } from '../lib/ui.js'
-import { pn, bytes, PROTO, NET } from '../lib/fmt.js'
+import { pn, bytes, PROTO, NET, flag } from '../lib/fmt.js'
 import { STATUS } from '../lib/client.js'
 
 const route = useRoute()
@@ -137,7 +164,27 @@ const addName = reactive({})
 const showAll = reactive({})
 const form = reactive({ open: false, inbound: null })
 const fref = ref(null)
-const busy = reactive({ save: false })
+const busy = reactive({ save: false, copy: false })
+const cp = reactive({ open: false, inbound: null, to: [], grant: true, results: [] })
+const copyTargets = computed(() => [
+  ...(srv.id ? [{ id: '', name: `${flag(meta.country)} ${srv.self || 'Этот сервер'}`.trim(), note: 'этот сервер' }] : []),
+  ...srv.nodes.filter(n => n.id !== srv.id).map(n => ({ id: n.id, name: `${flag(n.country)} ${n.name}`.trim(), note: n.lastError ? 'нет связи: ' + n.lastError : 'v' + (n.version || '?'), bad: !!n.lastError })),
+  { id: srv.id, name: `${srvName.value}`, note: 'этот же сервер — копия с другим портом' },
+])
+function openCopy(i) { Object.assign(cp, { open: true, inbound: i, to: [], grant: true, results: [] }); if (copyTargets.value.length === 2) cp.to = [copyTargets.value[0].id] }
+const toggleTo = (id) => { cp.to = cp.to.includes(id) ? cp.to.filter(x => x !== id) : [...cp.to, id] }
+async function doCopy() {
+  busy.copy = true
+  try {
+    const r = await post('inbounds-copy', { from: srv.id, id: cp.inbound.id, to: cp.to, grant: cp.grant })
+    cp.results = r.results || []
+    const bad = cp.results.filter(x => !x.ok).length
+    if (r.copied) ok(`Скопировано: ${r.copied}` + (bad ? `, ошибок: ${bad}` : ''))
+    else fail('Не скопировано — причины в списке')
+    cp.to = cp.to.filter(id => cp.results.some(x => x.server === id && !x.ok))
+    await reload(true); loadMeta()
+  } catch (e) { fail(e) } finally { busy.copy = false }
+}
 const netLabel = (i) => ({ hysteria2: 'QUIC', tuic: 'QUIC', amneziawg: 'UDP', masque: masqueNet(i) })[i.protocol] || NET[i.network]
 const masqueNet = (i) => { const a = i.alpn || []; const h2 = a.includes('h2'), h3 = a.includes('h3') || !h2; return h2 && h3 ? 'HTTP/3 + HTTP/2' : h2 ? 'HTTP/2' : 'HTTP/3' }
 const secLabel = (i) => i.protocol === 'tuic' ? `TLS · ${i.tuicCongestion || 'bbr'}` : i.protocol === 'masque' ? 'TLS · CONNECT-IP' : i.protocol === 'amneziawg' ? 'обфускация AmneziaWG' : i.protocol === 'hysteria2' ? `TLS${i.obfsPassword ? ' · salamander' : ''}` : i.security === 'reality' ? 'Reality · маскировка под сайт' : i.security === 'tls' ? 'TLS' : 'без защиты'
@@ -166,3 +213,16 @@ async function remove(i) {
 }
 onMounted(() => { if (route.query.new) { openForm(null); router.replace({ query: {} }) } })
 </script>
+<style>
+.h1 .cpy-l{display:flex;flex-direction:column;gap:6px}
+.h1 .cpy-s{display:flex;align-items:center;gap:12px;width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:var(--r-md,10px);background:var(--surface);color:var(--text);font:inherit;text-align:left;cursor:pointer}
+.h1 .cpy-s:hover{border-color:var(--faint)}
+.h1 .cpy-s.on{border-color:var(--accent);background:var(--surface2)}
+.h1 .cpy-c{flex:none;width:18px;height:18px;border-radius:var(--r-xs,5px);border:1.5px solid var(--faint);display:inline-flex;align-items:center;justify-content:center;color:transparent}
+.h1 .cpy-c .ic{width:12px;height:12px}
+.h1 .cpy-s.on .cpy-c{background:#5b54ee;border-color:#5b54ee;color:#fff}
+.h1 .cpy-n{display:flex;flex-direction:column;min-width:0;line-height:1.3}
+.h1 .cpy-n b{color:var(--strong);font-weight:600}
+.h1 .cpy-n small{color:var(--muted);font-size:var(--fs-xs);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.h1 .cpy-s.bad .cpy-n small{color:var(--bad)}
+</style>

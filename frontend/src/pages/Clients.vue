@@ -50,8 +50,8 @@
               <button class="chk" :class="{ on: pageItems.length && pageItems.every(c => sel.includes(c.id)) }" type="button" aria-label="Выбрать все" @click="toggleAll"><Icon n="check" /></button>
               <span>Клиент</span><span>Статус</span><span>Осталось</span><span>Трафик</span><span>Устройства</span><span></span>
             </div>
-            <div v-for="c in pageItems" :key="c.id" class="row">
-              <div class="grid-h" @click="open = c.id">
+            <div v-for="c in pageItems" :key="c.id" class="row" :class="{ open: expId === c.id }">
+              <div class="grid-h" :title="expId === c.id ? 'Свернуть' : 'Подробнее'" @click="expId = expId === c.id ? '' : c.id">
                 <button class="chk" :class="{ on: sel.includes(c.id) }" type="button" aria-label="Выбрать" @click.stop="toggle(c.id)"><Icon n="check" /></button>
                 <span class="ae-cl"><span class="ae-cl-n"><b>{{ c.name }}</b><span v-for="t in c.tags.slice(0, 2)" :key="t" class="badge b-mute" style="height:20px;font-size:11px">{{ t }}</span></span><span class="ae-sub">{{ c.telegram || 'без Telegram' }}{{ c.note ? ' · ' + c.note : '' }}</span></span>
                 <span class="ae-stt"><span class="i-stt" :class="STATUS[c.status]?.[1]">{{ STATUS[c.status]?.[0] || c.status }}</span><span v-if="c.online" class="badge b-ok ae-on"><span class="dot"></span>онлайн</span></span>
@@ -60,6 +60,7 @@
                 <span class="small">{{ c.devices }} / {{ c.deviceLimit || '∞' }}</span>
                 <button class="btn btn-sm btn-g btn-ic" type="button" title="Скопировать ссылку подписки" @click.stop="copy(c.subUrl, 'Ссылка подписки скопирована')"><Icon n="copy" /></button>
               </div>
+              <ClientCard v-if="expId === c.id" :c="c" :inbounds="inbounds" :countries="countries" @changed="reload(true)" @deleted="expId = ''; reload(true); loadMeta()" @edit="openDrawer($event, 'edit')" @view="openDrawer($event, 'view')" />
             </div>
             <Empty v-if="!filtered.length" icon="clients" :title="list.length ? 'Никого не нашли' : 'Клиентов пока нет'" :text="list.length ? 'Измените поиск или фильтр' : 'Создайте первого — у него будет своя ссылка подписки'">
               <button v-if="!list.length" class="btn btn-sm" type="button" @click="openNew"><Icon n="plus" />Новый клиент</button>
@@ -92,7 +93,7 @@
       </template>
     </Drawer>
 
-    <ClientDrawer :id="open" :inbounds="inbounds" :all-tags="allTags" @close="closeClient" @changed="reload(true)" />
+    <ClientDrawer :id="open" :start-mode="openMode" :inbounds="inbounds" :all-tags="allTags" @close="closeClient" @changed="reload(true); loadInbounds()" />
   </div>
 </template>
 <script setup>
@@ -105,6 +106,8 @@ import Empty from '../components/Empty.vue'
 import Drawer from '../components/Drawer.vue'
 import ClientForm from '../components/ClientForm.vue'
 import ClientDrawer from '../components/ClientDrawer.vue'
+import ClientCard from '../components/ClientCard.vue'
+import { srv, loadServers } from '../lib/server.js'
 import { get, post, download } from '../lib/api.js'
 import { meta, loadMeta } from '../lib/meta.js'
 import { useLoad } from '../lib/useLoad.js'
@@ -126,6 +129,10 @@ const tagF = ref('')
 const page = ref(1)
 const sel = ref([])
 const open = ref(typeof route.query.open === 'string' ? route.query.open : '')
+const openMode = ref('view')
+const expId = ref('')
+const countries = computed(() => Object.fromEntries(srv.nodes.map(n => [n.id, n.country])))
+function openDrawer(id, mode) { openMode.value = mode; open.value = ''; setTimeout(() => { open.value = id }) }
 const creating = ref(false)
 const ioMenu = ref(false)
 const form = ref(null)
@@ -161,7 +168,7 @@ function toggleAll() {
 }
 async function loadInbounds() { try { const r = await get('inbounds'); inbounds.value = [...r.inbounds, ...(r.nodeInbounds || [])] } catch {} }
 function openNew() { creating.value = true; loadInbounds() }
-function closeClient() { open.value = ''; if (route.query.open) router.replace({ query: {} }) }
+function closeClient() { open.value = ''; openMode.value = 'view'; if (route.query.open) router.replace({ query: {} }) }
 async function create() {
   busy.create = true
   try {
@@ -169,7 +176,7 @@ async function create() {
     ok(`Клиент ${r.name || ''} создан`)
     creating.value = false
     await reload(true); loadMeta()
-    if (r.id) open.value = r.id
+    if (r.id) { expId.value = r.id; filter.value = 'all'; q.value = ''; page.value = 1 }
   } catch (e) { fail(e) } finally { busy.create = false }
 }
 async function bulk(action) {
@@ -194,5 +201,5 @@ async function doImport() {
   busy.imp = true
   try { const r = await post('clients/import', { data: imp.data }); ok(`Добавлено: ${r.added}, пропущено: ${r.skipped}`); imp.open = false; imp.data = ''; await reload(true); loadMeta() } catch (e) { fail(e) } finally { busy.imp = false }
 }
-onMounted(() => { loadInbounds(); if (route.query.new) { openNew(); router.replace({ query: {} }) } })
+onMounted(() => { loadInbounds(); loadServers(); if (route.query.new) { openNew(); router.replace({ query: {} }) } })
 </script>

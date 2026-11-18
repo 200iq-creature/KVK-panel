@@ -81,6 +81,7 @@ func (a *App) apiMux() *http.ServeMux {
 	A("POST /api/inbounds/{id}/clients", a.apiInboundAddClient)
 	A("DELETE /api/inbounds/{id}/clients/{cid}", a.apiInboundRemoveClient)
 	A("GET /api/inbounds/{id}/link", a.apiInboundExampleLink)
+	A("POST /api/inbounds-copy", a.apiInboundCopy)
 	A("GET /api/tools/x25519", a.apiX25519)
 	A("GET /api/tools/port", a.apiPortCheck)
 	A("GET /api/autosetup", a.apiAutoGet)
