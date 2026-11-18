@@ -110,7 +110,7 @@
               <div class="i-ph"><h2>Что будет сделано</h2></div>
               <div class="i-pb">
                 <ul class="wz-plan">
-                  <li v-for="s in planServers" :key="s.id"><Icon n="globe" /><span><span><b>{{ s.name }}</b> — сайт на <code>{{ s.dom || '…' }}</code>, SNI <code>{{ s.dom || '…' }}</code></span><small>VLESS Reality · XHTTP и WebSocket за сайтом · gRPC и XHTTP Reality · Trojan · VMess · HTTPUpgrade · Shadowsocks · Hysteria2 · TUIC · AmneziaWG · MASQUE — имена «{{ s.name }} VLESS Reality»…</small></span></li>
+                  <li v-for="s in planServers" :key="s.id"><Icon n="globe" /><span><span><b>{{ s.name }}</b> — сайт на <code>{{ s.dom || '…' }}</code>, SNI <code>{{ s.dom || '…' }}</code></span><small>VLESS XHTTP Reality · VLESS gRPC Reality · VLESS WS TLS · Trojan Reality · VMess WS TLS · Shadowsocks · Hysteria2 · TUIC · AmneziaWG · MASQUE — имена «{{ s.name }} VLESS XHTTP Reality»…</small></span></li>
                   <li><Icon n="user" /><span><span><b>Клиент main</b> — все подключения всех серверов</span><small>{{ w.main ? 'уже есть — получит новые подключения' : 'будет создан, бессрочно и без лимита' }}</small></span></li>
                   <li><Icon n="sub" /><span><span><b>Подписка</b> — <code>{{ subHost }}</code></span></span></li>
                   <li><Icon n="lock" /><span><span><b>Панель</b> — {{ panelChanges ? 'переедет на ' + mainName + ' по кнопке в конце' : 'адрес не меняется' }}</span></span></li>

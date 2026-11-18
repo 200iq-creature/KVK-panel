@@ -335,7 +335,7 @@ func (a *App) apiWizRun(w http.ResponseWriter, r *http.Request) error {
 	}
 	add("domains", "Домены")
 	for _, s := range sites {
-		add("site:"+s.Server, "Сайт и Reality — "+servers[s.Server].Name)
+		add("site:"+s.Server, "Сайт — "+servers[s.Server].Name)
 		add("inb:"+s.Server, "Инбаунды — "+servers[s.Server].Name)
 	}
 	add("client", "Клиент main на всех серверах")
@@ -691,6 +691,16 @@ func (a *App) wizServerSetup(s wizServer, domID, name, email string) {
 		st.set(ik, "skip", "")
 		return
 	}
+	// 1.0.7 made more VLESS variants (Reality Vision with the site behind it, XHTTP/WS
+	// behind the site, HTTPUpgrade) — drop exactly those, by the names the wizard gave them
+	removed := a.wizDropExtraVless(s)
+	if len(removed) > 0 {
+		if err := a.srvCall(s, "GET", "autosetup", nil, &auto); err != nil {
+			st.set(sk, "bad", err.Error())
+			st.set(ik, "skip", "")
+			return
+		}
+	}
 	// the server's own domain goes first (it is the SNI); its other site domains stay
 	doms := []map[string]any{{"name": name, "proxy": false}}
 	for _, x := range auto.Settings.Domains {
@@ -705,9 +715,13 @@ func (a *App) wizServerSetup(s wizServer, domID, name, email string) {
 	}
 	var runErr error
 	port := 0
-	for _, p := range ports {
-		runErr = a.srvCall(s, "POST", "autosetup/run", map[string]any{"domains": doms, "sni": name, "port": p, "cdn": true,
-			"grantAll": false, "createClient": false, "email": email, "label": s.Name}, nil)
+	for i, p := range ports {
+		if i == 0 && len(removed) > 0 {
+			time.Sleep(2 * time.Second) // Xray lets go of the old Reality port
+		}
+		// only the site here: VLESS comes as XHTTP Reality, gRPC Reality and WS TLS below
+		runErr = a.srvCall(s, "POST", "autosetup/run", map[string]any{"siteOnly": true, "domains": doms, "sni": name, "port": p,
+			"cdn": false, "grantAll": false, "createClient": false, "email": email}, nil)
 		if runErr == nil {
 			port = p
 			break
@@ -760,7 +774,7 @@ func (a *App) wizServerSetup(s wizServer, domID, name, email string) {
 	if len(state.Warnings) > 0 {
 		status = "warn"
 	}
-	st.set(sk, status, "сайт "+name+" на порту "+strconv.Itoa(port)+" · SNI "+name+" · VLESS Reality, XHTTP и WebSocket за сайтом")
+	st.set(sk, status, "сайт "+name+" на порту "+strconv.Itoa(port)+" · SNI "+name)
 
 	// 3. the other protocols
 	st.set(ik, "run", "")
@@ -803,7 +817,7 @@ func (a *App) wizServerSetup(s wizServer, domID, name, email string) {
 		}
 		if res.ID != "" {
 			certID = res.ID
-			st.warn(s.Name + ": сертификат Let's Encrypt для " + name + " не выпущен (" + msg + ") — TLS-подключения (Hysteria2, TUIC, MASQUE, WS/HTTPUpgrade TLS) пока на самоподписанном. Когда сертификат появится, выберите его в этих инбаундах.")
+			st.warn(s.Name + ": сертификат Let's Encrypt для " + name + " не выпущен (" + msg + ") — TLS-подключения (VLESS WS TLS, VMess WS TLS, Hysteria2, TUIC, MASQUE) пока на самоподписанном. Когда сертификат появится, выберите его в этих инбаундах.")
 		} else {
 			certID = ""
 		}
@@ -819,10 +833,11 @@ func (a *App) wizServerSetup(s wizServer, domID, name, email string) {
 	}
 	N := s.Name + " "
 	specs := []map[string]any{
-		reality(map[string]any{"remark": N + "VLESS gRPC Reality", "protocol": "vless", "network": "grpc"}),
+		// VLESS: only these three
 		reality(map[string]any{"remark": N + "VLESS XHTTP Reality", "protocol": "vless", "network": "xhttp", "xhttpMode": "auto"}),
+		reality(map[string]any{"remark": N + "VLESS gRPC Reality", "protocol": "vless", "network": "grpc"}),
+		tlsOn(map[string]any{"remark": N + "VLESS WS TLS", "protocol": "vless", "network": "ws"}),
 		reality(map[string]any{"remark": N + "Trojan Reality", "protocol": "trojan", "network": "tcp"}),
-		tlsOn(map[string]any{"remark": N + "VLESS HTTPUpgrade TLS", "protocol": "vless", "network": "httpupgrade"}),
 		tlsOn(map[string]any{"remark": N + "VMess WS TLS", "protocol": "vmess", "network": "ws"}),
 		{"remark": N + "Shadowsocks", "protocol": "shadowsocks", "network": "tcp", "security": "none"},
 		tlsOn(map[string]any{"remark": N + "Hysteria2", "protocol": "hysteria2"}),
@@ -865,6 +880,9 @@ func (a *App) wizServerSetup(s wizServer, domID, name, email string) {
 	if len(made) > 0 {
 		detail = append(detail, "созданы: "+strings.Join(made, ", "))
 	}
+	if len(removed) > 0 {
+		detail = append(detail, "убраны лишние: "+strings.Join(removed, ", "))
+	}
 	if skipped > 0 {
 		detail = append(detail, strconv.Itoa(skipped)+" уже были")
 	}
@@ -879,6 +897,34 @@ func (a *App) wizServerSetup(s wizServer, domID, name, email string) {
 		stt = "warn"
 	}
 	st.set(ik, stt, strings.Join(detail, " · "))
+}
+
+// wizDropExtraVless deletes the VLESS inbounds an earlier wizard run made that
+// are no longer part of the set (only XHTTP Reality, gRPC Reality and WS TLS stay).
+// An old «WS TLS» that lived behind the site is replaced by a standalone one.
+func (a *App) wizDropExtraVless(s wizServer) []string {
+	var have struct {
+		Inbounds []struct {
+			ID     string `json:"id"`
+			Remark string `json:"remark"`
+			Auto   string `json:"auto"`
+		} `json:"inbounds"`
+	}
+	if err := a.srvCall(s, "GET", "inbounds", nil, &have); err != nil {
+		return nil
+	}
+	N := s.Name + " "
+	extra := map[string]bool{N + "VLESS Reality": true, N + "VLESS XHTTP CDN": true, N + "VLESS XHTTP TLS": true,
+		N + "VLESS WS CDN": true, N + "VLESS HTTPUpgrade TLS": true}
+	removed := []string{}
+	for _, in := range have.Inbounds {
+		if extra[in.Remark] || (in.Remark == N+"VLESS WS TLS" && in.Auto != "") {
+			if a.srvCall(s, "DELETE", "inbounds/"+in.ID, nil, nil) == nil {
+				removed = append(removed, strings.TrimPrefix(in.Remark, N))
+			}
+		}
+	}
+	return removed
 }
 
 // ---------- POST /api/wizard/switch ----------

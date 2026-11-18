@@ -180,6 +180,9 @@ func (a *App) autoPortCheck(port int) (bool, string) {
 	if reason != "" {
 		return false, reason
 	}
+	if fakePubPort() == port {
+		ours = true // the site already serves this port itself
+	}
 	if !ours && !portFree(port, "tcp") {
 		return false, "порт занят другой программой на сервере (например, nginx)"
 	}
