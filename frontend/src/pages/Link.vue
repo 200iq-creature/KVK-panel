@@ -56,6 +56,36 @@
           <div v-if="data.nodes.length" class="i-pb" style="padding-top:0"><div class="i-hint"><Icon n="info" /><span>Инбаунды, домены, сайт, фильтрация и WARP подключённых серверов настраиваются прямо здесь — выберите сервер вверху этих разделов, входить в его панель не нужно. Основной хранит копию конфигурации каждого сервера: если сервер заблокируют, поставьте панель на новый, вставьте его ключ в «Изменить» и нажмите «Восстановить». Инбаунды подключённых серверов при первой синхронизации выдаются всем клиентам и сразу попадают в их подписки. Кому какие оставить, выбирается в карточке клиента → «Инбаунды» (группа «Сервер «…»») или в боте-магазине для новых клиентов. Новый инбаунд на сервере получают клиенты, у которых уже есть доступ к этому серверу.</span></div></div>
           <div v-for="n in data.nodes.filter(x => x.enabled && x.lastError)" :key="'e' + n.id" class="i-pb" style="padding-top:0"><div class="i-hint bad"><Icon n="warn" /><span><b>{{ n.name }}:</b> {{ n.lastError }}</span></div></div>
         </section>
+        <section v-if="data.nodes.length" class="i-pn">
+          <div class="i-ph">
+            <h2>Обновление панелей</h2>
+            <span class="lk-ua">
+              <span v-if="upd.list" class="i-stt" :class="updCount ? 'wa' : updating ? 'wa' : 'ok'">{{ updating ? 'обновляются…' : updCount ? `обновления: ${updCount}` : 'все актуальны' }}</span>
+              <button class="btn btn-sm btn-g" type="button" :disabled="upd.checking" @click="checkUpd(false)"><span v-if="upd.checking" class="spin"></span><Icon v-else n="refresh" />Проверить</button>
+              <button class="btn btn-sm btn-p" type="button" :disabled="!updCount || upd.busy || updating" @click="runUpd(upd.list.filter(x => x.update && !x.updating))"><span v-if="upd.busy" class="spin"></span><Icon v-else n="download" />Обновить все{{ updCount ? ` (${updCount})` : '' }}</button>
+            </span>
+          </div>
+          <div class="i-pb lk-ub">
+            <p class="hint">Каждый сервер обновляется сам, из своей ветки — так же, как кнопкой в его «Настройках». Бэкап делается перед обновлением, Xray продолжает работать. Этот сервер обновляется последним: панель перезапустится, страница перезагрузится сама.</p>
+            <div v-if="!upd.list" class="lk-ul"><div class="lk-ur"><span class="muted">{{ upd.checking ? 'Проверяем версии на всех серверах…' : upd.error || '—' }}</span></div></div>
+            <div v-else class="lk-ul">
+              <div v-for="x in upd.list" :key="x.id || 'self'" class="lk-ur">
+                <span class="lk-un"><b>{{ flag(x.country) }} {{ x.name }}</b><small>{{ x.main ? 'этот сервер' : 'сервер связки' }}<template v-if="x.branch"> · ветка {{ x.branch }}</template></small></span>
+                <span class="lk-uv"><span class="i-mono">v{{ x.current || '?' }}</span><template v-if="x.update"> · доступна <b class="i-mono">v{{ x.latest }}</b></template></span>
+                <span class="lk-us">
+                  <span v-if="x.updating" class="i-stt wa"><span class="spin"></span>обновляется</span>
+                  <span v-else-if="x.done" class="i-stt ok">обновлён</span>
+                  <span v-else-if="x.error" class="i-stt bad" :title="x.error">ошибка</span>
+                  <span v-else-if="x.update" class="i-stt wa">есть обновление</span>
+                  <span v-else-if="x.latest" class="i-stt ok">актуальная</span>
+                  <span v-else class="i-stt mu">—</span>
+                </span>
+                <span class="lk-ub2"><button v-if="x.update && !x.updating" class="btn btn-sm" type="button" :disabled="upd.busy" @click="runUpd([x])">Обновить</button></span>
+                <span v-if="x.error && !x.updating" class="lk-ue">{{ x.error }}</span>
+              </div>
+            </div>
+          </div>
+        </section>
         <div class="i-c2">
           <section class="i-pn">
             <div class="i-ph"><h2>Ключ этого сервера</h2><span>для подключения к основному</span></div>
@@ -153,7 +183,7 @@
 </template>
 <script setup>
 import '../styles/Link.css'
-import { ref, reactive } from 'vue'
+import { ref, reactive, computed, watch, onBeforeUnmount } from 'vue'
 import Icon from '../components/Icon.vue'
 import Loading from '../components/Loading.vue'
 import Metric from '../components/Metric.vue'
@@ -173,6 +203,39 @@ const ed = reactive({ open: false, node: null, name: '', url: '', token: '', ena
 const pf = reactive({ open: false, node: null, data: null, error: '', dns: true, warns: [] })
 const add = reactive({ open: false, url: '', token: '', name: '', country: '', test: null })
 const showKey = ref(false)
+// panel updates of the whole link group
+const upd = reactive({ list: null, checking: false, busy: false, error: '' })
+const updCount = computed(() => (upd.list || []).filter(x => x.update && !x.updating).length)
+const updating = computed(() => (upd.list || []).some(x => x.updating))
+let updTimer = null
+async function checkUpd(quick) {
+  if (!quick) upd.checking = true
+  try {
+    const r = await get('nodes/updates' + (quick ? '?quick=1' : ''))
+    const prev = Object.fromEntries((upd.list || []).map(x => [x.id, x]))
+    upd.list = r.servers.map(x => (quick && prev[x.id] && !x.latest ? { ...x, latest: prev[x.id].latest } : x))
+    upd.error = ''
+  } catch (e) { if (!quick) { upd.error = e.message; fail(e) } } finally { upd.checking = false }
+}
+async function runUpd(list) {
+  if (!list.length) return
+  const self = list.some(x => x.main)
+  const names = list.map(x => x.name).join(', ')
+  if (!await confirm(list.length > 1 ? `Обновить ${pn(list.length, 'сервер', 'сервера', 'серверов')}?` : `Обновить «${list[0].name}»?`, `${names}. Каждый сервер сделает бэкап, скачает новую версию и перезапустит панель (около минуты). Xray продолжит работать.${self ? ' Этот сервер обновится последним — страница перезагрузится сама.' : ''}`, { okText: 'Обновить' })) return
+  upd.busy = true
+  try {
+    const r = await post('nodes/update', { ids: list.filter(x => !x.main).map(x => x.id), self })
+    const bad = (r.results || []).filter(x => !x.ok)
+    if (bad.length) fail(bad.map(x => `${x.name || x.id}: ${x.error}`).join('; '))
+    const okN = (r.results || []).length - bad.length
+    if (okN) ok(`Обновление запущено: ${okN}`)
+    if (r.self) { setTimeout(() => location.reload(), 70000) }
+    await checkUpd(true)
+  } catch (e) { fail(e) } finally { upd.busy = false }
+}
+watch(updating, (v) => { clearInterval(updTimer); if (v) updTimer = setInterval(() => checkUpd(true), 8000) })
+watch(() => data.value && data.value.nodes.length, (n, o) => { if (n && !o && !upd.list && !upd.checking) checkUpd(false) }, { immediate: true })
+onBeforeUnmount(() => clearInterval(updTimer))
 async function sync() { busy.sync = true; try { data.value = await post('nodes/sync'); ok('Синхронизировано') } catch (e) { fail(e) } finally { busy.sync = false } }
 async function test() { busy.test = true; add.test = null; try { add.test = await post('nodes/test', { url: add.url, token: add.token }) } catch (e) { fail(e) } finally { busy.test = false } }
 async function doAdd() {
@@ -229,4 +292,19 @@ async function detach() {
 .h1 .lk-cc .inp{width:100%;padding-right:40px;text-transform:uppercase}
 .h1 .lk-cc i{position:absolute;right:12px;top:50%;transform:translateY(-50%);font-style:normal;font-size:20px;line-height:1;pointer-events:none}
 .h1 .lk-cch{margin-top:-6px}
+.h1 .lk-ua{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.h1 .lk-ub{padding-top:0}
+.h1 .lk-ub>.hint{margin:0 0 12px}
+.h1 .lk-ul{border:1px solid var(--line);border-radius:var(--r-md,10px);overflow:hidden}
+.h1 .lk-ur{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr) 150px 110px;gap:12px;align-items:center;padding:10px 14px;border-top:1px solid var(--line2);font-size:var(--fs-sm)}
+.h1 .lk-ur:first-child{border-top:0}
+.h1 .lk-un{display:flex;flex-direction:column;min-width:0;line-height:1.3}
+.h1 .lk-un b{color:var(--strong);font-weight:600}
+.h1 .lk-un small{color:var(--muted);font-size:var(--fs-xs)}
+.h1 .lk-uv b{color:var(--strong)}
+.h1 .lk-us .i-stt{display:inline-flex;align-items:center;gap:6px}
+.h1 .lk-us .spin{width:12px;height:12px}
+.h1 .lk-ub2{justify-self:end}
+.h1 .lk-ue{grid-column:1/-1;color:var(--bad);font-size:var(--fs-xs);margin-top:-4px;overflow-wrap:anywhere}
+@media (max-width:760px){.h1 .lk-ur{grid-template-columns:minmax(0,1fr) auto}.h1 .lk-uv{grid-column:1}.h1 .lk-us{grid-column:2;grid-row:1;justify-self:end}.h1 .lk-ub2{grid-column:2;grid-row:2}}
 </style>

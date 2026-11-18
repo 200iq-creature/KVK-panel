@@ -185,6 +185,8 @@ func (a *App) apiMux() *http.ServeMux {
 	A("POST /api/nodes", a.apiNodeAdd)
 	A("POST /api/nodes/test", a.apiNodeTest)
 	A("POST /api/nodes/sync", a.apiNodesSync)
+	A("GET /api/nodes/updates", a.apiNodesUpdates)
+	A("POST /api/nodes/update", a.apiNodesUpdate)
 	A("PUT /api/nodes/{id}", a.apiNodeUpdate)
 	A("DELETE /api/nodes/{id}", a.apiNodeDelete)
 	A("POST /api/main/detach", a.apiMainDetach)

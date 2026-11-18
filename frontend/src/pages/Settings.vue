@@ -140,6 +140,7 @@
               <div class="i-kv"><Kr k="Установлена" :v="'v' + s.version + (s.branch && s.branch !== 'main' ? ' · ветка ' + s.branch : '')" /><Kr k="Последняя" :v="(upd?.latest || s.latestVersion) ? 'v' + (upd?.latest || s.latestVersion) : '—'" /><Kr k="Обновляться из ветки" :v="upd?.branch || s.updateBranch || 'main'" code /><Kr k="Репозиторий" :v="s.repo" code /></div>
               <TgRow v-model="g.autoUpdate" bold label="Обновляться автоматически" hint="проверка раз в сутки; бэкап перед обновлением" @update:model-value="saveGeneral" />
               <div class="ft"><button class="btn btn-g" type="button" :disabled="busy.chk" @click="checkUpd"><span v-if="busy.chk" class="spin"></span>Проверить</button><span class="grow"></span><button class="btn btn-p" type="button" :disabled="!upd?.update || busy.upd" @click="doUpdate"><span v-if="busy.upd" class="spin"></span>Обновить до {{ upd?.latest }}</button></div>
+              <p v-if="srv.nodes.length" class="hint">Все серверы связки сразу — в <router-link to="/link">«Связке серверов» → «Обновление панелей»</router-link>.</p>
               <p class="hint">Из консоли: <code class="i-mono">kvk update</code> — из запомненной ветки, <code class="i-mono">kvk update ВЕТКА</code> — переключиться на другую ветку (например, <code class="i-mono">main</code>).</p>
             </div>
           </section>
@@ -167,6 +168,7 @@ import { ok, fail, confirm, copy } from '../lib/ui.js'
 import { uptime, date, dt, ago, bytes, flag } from '../lib/fmt.js'
 import { RESET } from '../lib/client.js'
 import { loadMeta } from '../lib/meta.js'
+import { srv, loadServers } from '../lib/server.js'
 import { useRoute } from 'vue-router'
 import { openXray } from '../lib/xrayui.js'
 
@@ -250,6 +252,6 @@ async function doUpdate() {
 }
 watch(tab, (t) => { if (t === 'xray') { loadXray(); if (!vers.value) loadVersions() } if (t === 'geo') loadGeo(); if (t === 'api' && !upd.value) checkUpd() })
 let timer
-onMounted(() => { load(); loadXray(); if (tab.value === 'xray') loadVersions(); timer = setInterval(() => { if (tab.value === 'xray') loadXray() }, 5000) })
+onMounted(() => { load(); loadXray(); loadServers(); if (tab.value === 'xray') loadVersions(); timer = setInterval(() => { if (tab.value === 'xray') loadXray() }, 5000) })
 onBeforeUnmount(() => clearInterval(timer))
 </script>
