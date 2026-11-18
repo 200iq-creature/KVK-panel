@@ -2,7 +2,7 @@
   <div class="pg-security">
     <div class="pagein i-wrap">
       <div class="i-hd">
-        <div><span class="w2-eb">доступ к панели</span><h1>Безопасность</h1><p>Двухфакторный вход, подтверждение в Telegram, HTTPS и журнал входов. Панель скрыта за секретным путём — без него сервер отвечает обычной страницей nginx 404.</p></div>
+        <div><span class="w2-eb"><router-link to="/settings">Настройки</router-link> · доступ к панели</span><h1>Безопасность</h1><p>Двухфакторный вход, подтверждение в Telegram, HTTPS и журнал входов. Панель скрыта за секретным путём — без него сервер отвечает обычной страницей nginx 404.</p></div>
       </div>
       <Loading v-if="!d" :error="error" @retry="reload" />
       <template v-else>

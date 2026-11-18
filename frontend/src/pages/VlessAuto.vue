@@ -3,15 +3,16 @@
     <div class="pagein i-wrap">
       <div class="i-hd">
         <div>
-          <span class="vw-eb">автонастройка · Reality + фейк-сайт + CDN</span>
-          <h1>VLESS за минуту</h1>
-          <p>Укажите свои домены — панель сама поднимет сайт-прикрытие, создаст VLESS Reality и запасной вход через Cloudflare CDN, выпустит сертификаты, откроет порты и выдаст готовые ссылки. Вручную ничего настраивать не нужно.</p>
+          <span class="vw-eb">{{ srvName }} · сайт-прикрытие · VLESS Reality + CDN</span>
+          <h1>Сайт</h1>
+          <p>Сайт-прикрытие на ваших доменах — его видят браузеры, поисковики и сканеры. За ним работают VLESS Reality и запасной вход через Cloudflare CDN. Выберите домены — панель сама поднимет сайт, выпустит сертификаты, создаст подключения, откроет порты и выдаст готовые ссылки.</p>
         </div>
         <div v-if="d?.settings?.enabled && !editing" class="i-hd-a row">
           <button class="btn" type="button" :disabled="busy.check" @click="selfCheck"><span v-if="busy.check" class="spin"></span><Icon v-else n="shield" />Проверить работу</button>
-          <button class="btn btn-p" type="button" @click="startEdit"><Icon n="edit" />Перенастроить</button>
+          <button class="btn btn-p" type="button" @click="startEdit"><Icon n="edit" />Домены и настройки</button>
         </div>
       </div>
+      <ServerPicker />
 
       <Loading v-if="!d" />
       <template v-else>
@@ -53,10 +54,11 @@
             </section>
 
             <section class="i-pn">
-              <div class="i-ph"><h2>Состояние</h2><span class="i-stt" :class="d.site.running ? 'ok' : 'bad'">{{ d.site.running ? 'сайт работает' : 'сайт остановлен' }}</span></div>
+              <div class="i-ph"><h2>Сайт</h2><span class="i-stt" :class="d.site.running ? 'ok' : 'bad'">{{ d.site.running ? 'сайт работает' : 'сайт остановлен' }}</span></div>
               <div class="i-pb">
                 <div class="i-kv">
-                  <Kr k="Сервер" :v="d.serverIp" code />
+                  <Kr k="Сервер" :v="srvName + ' · ' + d.serverIp" code />
+                  <Kr k="Домены сайта" :v="(d.settings.domains || []).join(', ')" />
                   <Kr k="SNI Reality" :v="d.settings.sni" code />
                   <Kr k="Порт" :v="d.settings.port" />
                   <Kr k="CDN-домены" :v="(d.settings.cdnDomains || []).join(', ') || 'выключено'" />
@@ -90,9 +92,12 @@
         <template v-if="!d.settings.enabled || editing">
           <div class="au-grid">
             <section class="i-pn">
-              <div class="i-ph"><h2><span class="vw-num">1</span> Домены</h2><span class="muted">от 1 до 10 · чем больше, тем надёжнее</span></div>
+              <div class="i-ph"><h2><span class="vw-num">1</span> Домены сайта</h2><span class="muted">от 1 до 10 · чем больше, тем надёжнее</span></div>
               <div class="i-pb">
-                <p class="hint">Подойдут любые домены и поддомены, которыми вы управляете. На всех будет один и тот же сайт-прикрытие — так сервер выглядит как обычный сайт. Один из доменов станет «маской» (SNI) для Reality.</p>
+                <p class="hint">Выберите домены из раздела «Домены» сервера «{{ srvName }}» или впишите новые — подойдут любые домены и поддомены, которыми вы управляете. На всех будет один и тот же сайт-прикрытие — так сервер выглядит как обычный сайт. Один из доменов станет «маской» (SNI) для Reality.</p>
+                <div v-if="pickable.length" class="au-pick">
+                  <button v-for="dm in pickable" :key="dm.id" type="button" class="au-chip" :title="dm.panelOf ? 'На этом домене открывается панель — сайт будет на другом порту, это не мешает' : ''" @click="pickDomain(dm.name)"><Icon n="plus" /><code>{{ dm.name }}</code><small v-if="dm.panelOf">панель «{{ dm.panelOf }}»</small><small v-else-if="dm.usedBy?.length">{{ dm.usedBy.join(', ') }}</small></button>
+                </div>
                 <div class="au-add">
                   <input v-model="newDom" class="inp mono" placeholder="example.com или site.example.com" @keydown.enter.prevent="addDomain" @paste="onPaste">
                   <button class="btn" type="button" :disabled="!newDom.trim()" @click="addDomain"><Icon n="plus" />Добавить</button>
@@ -101,7 +106,7 @@
                   <div v-for="(dm, i) in f.domains" :key="dm.name" class="au-dom" :class="{ sni: f.sni === dm.name }">
                     <div class="au-dh">
                       <button class="au-rd" type="button" :class="{ on: f.sni === dm.name }" :title="'Сделать маской Reality (SNI)'" @click="f.sni = dm.name"></button>
-                      <span class="au-dn"><code>{{ dm.name }}</code><small>{{ f.sni === dm.name ? 'маска Reality (SNI)' : 'нажмите кружок, чтобы сделать маской' }}</small></span>
+                      <span class="au-dn"><code>{{ dm.name }}</code><small>{{ f.sni === dm.name ? 'маска Reality (SNI)' : 'нажмите кружок, чтобы сделать маской' }}<template v-if="domInfo(dm.name)?.panelOf"> · здесь панель «{{ domInfo(dm.name).panelOf }}»</template></small></span>
                       <span v-if="dnsOf(dm.name)" class="au-dns" :class="DNS[dnsOf(dm.name).status]?.[1]" :title="(dnsOf(dm.name).ips || []).join(', ')">{{ DNS[dnsOf(dm.name).status]?.[0] }}</span>
                       <button class="btn btn-sm btn-g btn-ic" type="button" aria-label="Убрать" @click="f.domains.splice(i, 1); fixSni()"><Icon n="x" /></button>
                     </div>
@@ -127,8 +132,9 @@
                   </div>
                   <div class="vw-tgl">
                     <TgRow v-model="f.cdn" bold label="Запасной вход через CDN" hint="VLESS XHTTP за сайтом — для доменов с оранжевым облаком" />
-                    <TgRow v-model="f.grantAll" bold label="Выдать всем клиентам" :hint="`новые подключения появятся в подписке у ${d.clients} ${plural(d.clients, 'клиента', 'клиентов', 'клиентов')}`" />
-                    <TgRow v-model="f.createClient" bold label="Создать первого клиента" hint="если клиентов ещё нет — чтобы сразу получить ссылку" />
+                    <TgRow v-if="!remote" v-model="f.grantAll" bold label="Выдать всем клиентам" :hint="`новые подключения появятся в подписке у ${d.clients} ${plural(d.clients, 'клиента', 'клиентов', 'клиентов')}`" />
+                    <TgRow v-else v-model="f.grantAll" bold label="Выдать всем клиентам" :hint="`клиентам основного сервера — подключения «${srvName}» появятся в их подписках`" />
+                    <TgRow v-if="!remote" v-model="f.createClient" bold label="Создать первого клиента" hint="если клиентов ещё нет — чтобы сразу получить ссылку" />
                   </div>
                   <div class="fld"><label class="lbl">E-mail для Let's Encrypt <span class="muted">· необязательно</span></label><input v-model="f.email" class="inp" type="email" placeholder="для писем об истечении сертификатов"></div>
                 </div>
@@ -201,7 +207,7 @@
   </div>
 </template>
 <script setup>
-import { ref, reactive, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, reactive, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import Icon from '../components/Icon.vue'
 import Loading from '../components/Loading.vue'
 import Empty from '../components/Empty.vue'
@@ -211,7 +217,9 @@ import Seg from '../components/Seg.vue'
 import Kr from '../components/Kr.vue'
 import Qr from '../components/Qr.vue'
 import Drawer from '../components/Drawer.vue'
-import { get, post, put, del, BASE } from '../lib/api.js'
+import ServerPicker from '../components/ServerPicker.vue'
+import { post as mpost } from '../lib/api.js'
+import { srv, sget as get, spost as post, sput as put, sdel as del, surl, srvName, remote } from '../lib/server.js'
 import { ok, fail, confirm, copy } from '../lib/ui.js'
 import { dt, date, plural } from '../lib/fmt.js'
 import { loadMeta } from '../lib/meta.js'
@@ -230,7 +238,12 @@ const html = ref('')
 const frameKey = ref(0)
 const busy = reactive({ chk: false, run: false, check: false, html: false })
 const f = reactive({ domains: [], sni: '', port: 443, cdn: true, grantAll: true, createClient: true, email: '', cfManage: false, cfToken: '' })
-const previewUrl = computed(() => BASE + 'api/autosetup/preview?k=' + frameKey.value)
+const previewUrl = computed(() => surl('autosetup/preview') + '?k=' + frameKey.value + '&s=' + (srv.id || 'self'))
+const doms = ref([])
+const domInfo = (n) => doms.value.find(x => x.name === n)
+const pickable = computed(() => doms.value.filter(x => x.kind === 'domain' && !f.domains.some(y => y.name === x.name)))
+function pickDomain(n) { newDom.value = n; addDomain() }
+async function loadDoms() { try { doms.value = (await get('domains')).domains || [] } catch { doms.value = [] } }
 const cfOn = computed(() => f.cfManage && (f.cfToken || d.value?.cfTokenSet))
 const cdnList = computed(() => f.domains.filter(x => x.proxy).map(x => x.name))
 const missingZones = computed(() => Object.entries(chk.value?.cf?.zones || {}).filter(([, z]) => !z).map(([n]) => n))
@@ -262,6 +275,7 @@ async function load() {
   try {
     const r = await get('autosetup')
     d.value = r; st.value = r.state || {}
+    loadDoms()
     if (!editing.value && !f.domains.length) fillForm()
     if (html.value === '' || html.value === (d.value.settings.customHtml || '')) html.value = r.settings.customHtml || ''
   } catch (e) { fail(e) }
@@ -289,7 +303,9 @@ async function run() {
   if (d.value.settings.enabled && !await confirm('Перенастроить?', 'Автоинбаунды будут пересозданы с новыми параметрами — ключи Reality сохранятся, ссылки клиентов обновятся в подписке.', { okText: 'Перенастроить' })) return
   busy.run = true
   try {
-    await post('autosetup/run', { domains: f.domains, sni: f.sni, port: Number(f.port) || 443, cdn: f.cdn, grantAll: f.grantAll, createClient: f.createClient, email: f.email, cfToken: f.cfToken, cfManage: f.cfManage })
+    // on a linked server the clients live here: grant on this panel when the setup is done
+    grantAfter = remote.value && f.grantAll ? srv.id : ''
+    await post('autosetup/run', { domains: f.domains, sni: f.sni, port: Number(f.port) || 443, cdn: f.cdn, grantAll: remote.value ? false : f.grantAll, createClient: remote.value ? false : f.createClient, email: f.email, cfToken: f.cfToken, cfManage: f.cfManage })
     showRun.value = true
     poll()
   } catch (e) { fail(e) } finally { busy.run = false }
@@ -304,6 +320,10 @@ async function poll() {
     if (prev !== false) {
       showRun.value = true
       await load(); loadMeta(); frameKey.value++
+      if (grantAfter && grantAfter === srv.id && !st.value.error) {
+        for (const i of d.value.inbounds || []) { try { await mpost(`nodes/${grantAfter}/grant`, { inbound: i.id, all: true }) } catch (e) { fail(e) } }
+        grantAfter = ''
+      }
       if (!st.value.error) { editing.value = false; ok('Готово — ссылки ниже') }
     }
   } catch { pt = setTimeout(poll, 2000) }
@@ -325,7 +345,13 @@ function loadFile(e) {
   if (file.size > 2 << 20) { fail('Файл больше 2 МБ'); return }
   const r = new FileReader(); r.onload = () => { html.value = String(r.result || '') }; r.readAsText(file)
 }
+let grantAfter = ''
 onMounted(async () => { await load(); if (st.value.running) { showRun.value = true; poll() } })
+watch(() => srv.id, async () => {
+  clearTimeout(pt); d.value = null; st.value = {}; chk.value = null; checks.value = null; editing.value = false; showRun.value = false; html.value = ''
+  Object.assign(f, { domains: [], sni: '', port: 443, cdn: true, grantAll: true, createClient: true, email: '', cfManage: false, cfToken: '' })
+  await load(); if (st.value.running) { showRun.value = true; poll() }
+})
 onBeforeUnmount(() => clearTimeout(pt))
 </script>
 <style>
@@ -336,6 +362,12 @@ onBeforeUnmount(() => clearTimeout(pt))
 .h1 .au-grid{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:18px;align-items:start}
 .h1 .au-side{display:flex;flex-direction:column;gap:18px;min-width:0}
 .h1 .au-add{display:flex;gap:8px}.h1 .au-add .inp{flex:1}
+.h1 .au-pick{display:flex;flex-wrap:wrap;gap:6px}
+.h1 .au-chip{display:inline-flex;align-items:center;gap:6px;min-height:var(--ctlSm);padding:4px 12px 4px 8px;border-radius:99px;border:1px dashed var(--edge3);background:var(--surface);color:var(--text);font:inherit;font-size:var(--fs-sm);cursor:pointer}
+.h1 .au-chip .ic{width:14px;height:14px;color:var(--accentText)}
+.h1 .au-chip code{font-family:var(--mono);color:var(--strong)}
+.h1 .au-chip small{font-size:var(--fs-xs);color:var(--muted)}
+@media (hover:hover){.h1 .au-chip:hover{border-color:var(--accent);border-style:solid}}
 .h1 .au-doms{display:flex;flex-direction:column;gap:8px}
 .h1 .au-dom{display:flex;flex-direction:column;gap:10px;padding:12px 14px;border-radius:var(--r-lg);border:1px solid var(--line);background:var(--surface)}
 .h1 .au-dom.sni{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}

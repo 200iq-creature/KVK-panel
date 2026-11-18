@@ -2,9 +2,10 @@
   <div class="pg-domains">
     <div class="pagein i-wrap">
       <div class="i-hd">
-        <div><span class="vw-eb">сертификаты TLS · IP сервера <span class="i-mono">{{ data?.serverIp || '—' }}</span></span><h1>Домены</h1><p>Домены и IP-адреса с сертификатами — для HTTPS панели и инбаундов с TLS (Trojan, VLESS TLS, Hysteria2). Let's Encrypt выпускается и продлевается сам.</p></div>
+        <div><span class="vw-eb">{{ srvName }} · сертификаты TLS · IP сервера <span class="i-mono">{{ data?.serverIp || '—' }}</span></span><h1>Домены</h1><p>Домены и IP-адреса с сертификатами — для сайта-прикрытия, HTTPS панели и инбаундов с TLS (Trojan, VLESS TLS, Hysteria2). Let's Encrypt выпускается и продлевается сам.<template v-if="srv.nodes.length"> Домены связанных серверов добавляются здесь же — выберите сервер.</template></p></div>
         <div class="i-hd-a"><button class="btn btn-p" type="button" @click="openAdd"><Icon n="plus" />Добавить домен или IP</button></div>
       </div>
+      <ServerPicker />
       <Loading v-if="!data" :error="error" @retry="reload" />
       <template v-else>
         <div class="i-mt">
@@ -24,7 +25,7 @@
                   <td>{{ MODE[d.mode] }}<div v-if="d.mode === 'letsencrypt'" class="muted" style="font-size:12px">{{ d.autoRenew ? 'автопродление' : 'без автопродления' }}</div></td>
                   <td><span class="i-stt" :class="d.issuing ? 'wa' : d.status === 'active' ? (d.daysLeft < 14 ? 'wa' : 'ok') : d.status === 'error' ? 'bad' : 'mu'">{{ d.issuing ? 'выпускается…' : ST[d.status] || d.status }}</span><div v-if="d.error" class="bad-t" style="font-size:12px;max-width:320px">{{ d.error }}</div></td>
                   <td class="nw">{{ d.expiresAt ? date(d.expiresAt) + ` · ${d.daysLeft} дн.` : '—' }}</td>
-                  <td><span v-if="d.panel" class="badge b-info">панель</span> <span v-for="u in d.usedBy" :key="u" class="badge b-mute" style="margin-right:4px">{{ u }}</span><span v-if="!d.panel && !d.usedBy?.length" class="muted">—</span></td>
+                  <td><span v-if="d.panelOf" class="badge b-info" style="margin-right:4px" :title="d.panel ? 'HTTPS панели' : 'адрес панели'">панель «{{ d.panelOf }}»</span><span v-if="d.site" class="badge b-ok" style="margin-right:4px">{{ d.sni ? 'сайт-прикрытие · маска Reality' : 'сайт-прикрытие' }}</span><span v-for="u in d.usedBy" :key="u" class="badge b-mute" style="margin-right:4px">{{ u }}</span><span v-if="!d.panelOf && !d.site && !d.usedBy?.length" class="muted">—</span></td>
                   <td class="r"><span class="acts">
                     <button v-if="d.mode !== 'custom'" class="btn btn-sm btn-g" type="button" :disabled="d.issuing" @click="issue(d)">{{ d.status === 'active' ? 'Перевыпустить' : 'Выпустить' }}</button>
                     <button v-if="!d.panel && d.status === 'active'" class="btn btn-sm" type="button" @click="forPanel(d)"><Icon n="lock" />Для панели</button>
@@ -63,7 +64,7 @@
     </div>
     <Drawer :open="add.open" title="Добавить домен или IP" eyebrow="домены" @close="add.open = false">
       <div class="col">
-        <div class="fld"><label class="lbl">Домен или IP</label><input v-model="add.name" class="inp mono" placeholder="vpn.example.com"><div class="row" style="margin-top:6px"><button class="btn btn-sm btn-g" type="button" @click="add.name = data.serverIp">IP этого сервера</button></div></div>
+        <div class="fld"><label class="lbl">Домен или IP</label><input v-model="add.name" class="inp mono" placeholder="vpn.example.com"><div class="row" style="margin-top:6px"><button class="btn btn-sm btn-g" type="button" @click="add.name = data.serverIp">IP сервера «{{ srvName }}»</button></div></div>
         <div class="fld"><label class="lbl">Сертификат</label><Opt v-model="add.mode" :options="[{ v: 'letsencrypt', l: `Let's Encrypt`, s: 'бесплатно, продлевается автоматически' }, { v: 'selfsigned', l: 'Самоподписанный', s: 'сразу, без проверки домена' }, { v: 'custom', l: 'Свой сертификат', s: 'вставить PEM' }]" /></div>
         <div v-if="add.mode === 'letsencrypt'" class="fld"><label class="lbl">E-mail (необязательно)</label><input v-model="add.email" class="inp" type="email" placeholder="для писем Let's Encrypt"></div>
         <div v-if="add.mode === 'letsencrypt' && isIp" class="i-hint"><Icon n="info" /><span>Для IP Let's Encrypt выдаёт короткие сертификаты (около 6 дней) — панель продлевает их автоматически.</span></div>
@@ -87,7 +88,8 @@ import Empty from '../components/Empty.vue'
 import Drawer from '../components/Drawer.vue'
 import Opt from '../components/Opt.vue'
 import TgRow from '../components/TgRow.vue'
-import { get, post, put, del } from '../lib/api.js'
+import ServerPicker from '../components/ServerPicker.vue'
+import { srv, sget as get, spost as post, sput as put, sdel as del, srvName, remote } from '../lib/server.js'
 import { useLoad } from '../lib/useLoad.js'
 import { ok, fail, confirm } from '../lib/ui.js'
 import { date } from '../lib/fmt.js'
@@ -98,13 +100,15 @@ const ST = { active: 'действует', pending: 'ожидает выпуск
 const { data, error, reload } = useLoad(() => get('domains'), { interval: 5000 })
 const host = ref('')
 watch(data, (d, old) => { if (d && !old) host.value = d.publicHost })
+watch(() => srv.id, () => { data.value = null; error.value = ''; reload() })
 const busy = reactive({ add: false })
 const add = reactive({ open: false, name: '', mode: 'letsencrypt', email: '', cert: '', key: '', forPanel: false })
 const isIp = computed(() => /^[\d.]+$|:/.test(add.name.trim()))
 const soon = computed(() => (data.value?.domains || []).filter(d => d.status === 'active' && d.daysLeft < 14 && d.mode !== 'letsencrypt').length + (data.value?.domains || []).filter(d => d.mode === 'letsencrypt' && d.status === 'active' && d.daysLeft < 3).length)
 const panelDom = computed(() => (data.value?.domains || []).find(d => d.panel))
 function openAdd() { Object.assign(add, { open: true, name: '', mode: 'letsencrypt', email: '', cert: '', key: '', forPanel: !panelDom.value }) }
-function goTo(url, msg) { ok(msg); setTimeout(() => { location.href = url }, 3000) }
+// HTTPS of a linked server's panel: its address on this panel follows by itself
+function goTo(url, msg) { if (remote.value) { ok(msg.replace('Панель', `Панель «${srvName.value}»`)); setTimeout(() => reload(true), 3000); return } ok(msg); setTimeout(() => { location.href = url }, 3000) }
 async function doAdd() {
   busy.add = true
   try {

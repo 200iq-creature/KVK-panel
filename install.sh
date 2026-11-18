@@ -324,7 +324,8 @@ cmd_menu() {
  22. Перевыпустить API-токен
  23. Открыть порт в firewall
  24. Включить BBR
- 25. Удалить панель
+ 25. Ключ связки серверов (API-токен)
+ 26. Удалить панель
   0. Выход
 ===================================================
 EOF
@@ -356,7 +357,8 @@ EOF
     22) offline reset-token ;;
     23) read -rp "Порт: " p; read -rp "Протокол [tcp/udp]: " pr; open_port "$p" "${pr:-tcp}" ;;
     24) enable_bbr ;;
-    25) uninstall ;;
+    25) P apikey ;;
+    26) uninstall ;;
     0) exit 0 ;;
     *) red "Нет такого пункта" ;;
   esac
@@ -379,6 +381,7 @@ case "${1:-}" in
   backup) P backup ;;
   restore) shift; offline restore "$1" ;;
   reset) offline reset-creds ;;
+  apikey | key | api) P apikey ;;
   bbr) enable_bbr ;;
   *) cat <<EOF
 Использование: kvk [команда]
@@ -387,6 +390,7 @@ case "${1:-}" in
   log             журнал панели
   info            адрес и логин
   reset           сбросить логин и пароль
+  apikey          ключ связки серверов и API-токен
   update [ВЕТКА]  обновить панель (ветка запоминается, по умолчанию main)
   version         версия панели
   xray [VER]      установить версию Xray

@@ -36,7 +36,7 @@
 
     <template v-if="(f.security === 'tls' && !special) || tlsAlways">
       <div class="fld"><label class="lbl">Сертификат</label>
-        <select v-model="f.certId" class="inp"><option value="">— выберите —</option><option v-for="d in domains" :key="d.id" :value="d.id" :disabled="d.status !== 'active'">{{ d.name }} · {{ d.mode === 'selfsigned' ? 'самоподписанный' : d.mode === 'acme' ? "Let's Encrypt" : 'свой' }}{{ d.status !== 'active' ? ' (не выпущен)' : '' }}</option></select>
+        <select v-model="f.certId" class="inp"><option value="">— выберите —</option><option v-for="d in domains" :key="d.id" :value="d.id" :disabled="d.status !== 'active'">{{ d.name }} · {{ d.mode === 'selfsigned' ? 'самоподписанный' : d.mode === 'letsencrypt' ? "Let's Encrypt" : 'свой' }}{{ domUse(d) }}{{ d.status !== 'active' ? ' (не выпущен)' : '' }}</option></select>
         <p class="hint">Нет нужного? <router-link to="/domains">Добавьте домен или IP</router-link> — сертификат выпустится сам.</p>
       </div>
       <div class="two">
@@ -140,7 +140,7 @@ import Icon from './Icon.vue'
 import Seg from './Seg.vue'
 import Opt from './Opt.vue'
 import TgRow from './TgRow.vue'
-import { get } from '../lib/api.js'
+import { sget as get } from '../lib/server.js'
 import { fail } from '../lib/ui.js'
 
 const p = defineProps({ inbound: Object, edit: Boolean })
@@ -187,6 +187,7 @@ const portKind = computed(() => {
   return 'TCP-порт'
 })
 const domains = ref([])
+const domUse = (d) => [d.site ? (d.sni ? 'сайт-прикрытие, маска Reality' : 'сайт-прикрытие') : '', d.panelOf ? `панель «${d.panelOf}»` : ''].filter(Boolean).map(s => ' — ' + s).join('')
 const portMsg = reactive({ ok: false, text: '' })
 const nets = computed(() => [['tcp', 'TCP'], ['xhttp', 'XHTTP'], ['grpc', 'gRPC'], ['ws', 'WebSocket'], ['httpupgrade', 'HTTPUpgrade']])
 const secs = computed(() => {

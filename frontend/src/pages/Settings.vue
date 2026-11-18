@@ -3,6 +3,10 @@
     <div class="pagein i-wrap">
       <div class="i-hd">
         <div><span class="w2-eb">KVK Panel {{ s?.version }} · Xray {{ xs?.status?.version || '—' }}</span><h1>Настройки</h1><p>Адрес панели, ядро Xray и его версии, geo-файлы, API и обновление панели. Домены и сертификаты — в разделе <router-link to="/domains">«Домены»</router-link>.</p></div>
+        <div class="i-hd-a">
+          <router-link class="btn" to="/security"><Icon n="sec" />Безопасность</router-link>
+          <router-link class="btn" to="/backups"><Icon n="bak" />Бэкапы</router-link>
+        </div>
       </div>
       <Loading v-if="!s" :error="error" @retry="load" />
       <template v-else>

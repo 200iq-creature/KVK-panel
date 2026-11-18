@@ -325,6 +325,19 @@ type Node struct {
 	Granted bool `json:"granted,omitempty"`
 	// Xray is the core version reported by the node
 	Xray string `json:"xray,omitempty"`
+	// Profile is the last saved configuration of the server (see profile.go):
+	// ProfileHash is its hash, RemoteHash the hash the server reports now.
+	Profile     *serverProfile `json:"profile,omitempty"`
+	ProfileHash string         `json:"profileHash,omitempty"`
+	ProfileAt   int64          `json:"profileAt,omitempty"`
+	RemoteHash  string         `json:"remoteHash,omitempty"`
+	// Drift: the server's configuration differs from the saved one.
+	Drift bool `json:"drift,omitempty"`
+	// Replaced: the key was changed to another server that has not been
+	// restored yet — its configuration is never saved over the old one.
+	Replaced bool `json:"replaced,omitempty"`
+	// EditedAt: last change made on the server from this panel.
+	EditedAt int64 `json:"editedAt,omitempty"`
 }
 
 // InboundIDs returns the unique (main-side) inbound ids of the node.

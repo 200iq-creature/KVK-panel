@@ -36,9 +36,9 @@
       <aside class="tx-rail" aria-label="Разделы">
         <div class="tx-rh-m"><b>KVK Panel</b><label class="tx-ib" for="navtg" aria-label="Закрыть меню" role="button"><Icon n="x" /></label></div>
         <nav aria-label="Разделы" style="display:flex;flex-direction:column;gap:10px">
-          <div v-for="g in NAV" :key="g.label" style="display:flex;flex-direction:column;gap:1px">
+          <div v-for="g in NAV_SIDE" :key="g.label" style="display:flex;flex-direction:column;gap:1px">
             <p class="eyebrow tx-gl" style="padding:0 11px 3px">{{ g.label }}</p>
-            <router-link v-for="it in g.items" :key="it.id" class="nav" :class="{ on: route.meta.nav === it.id }" :to="it.to" :aria-current="route.meta.nav === it.id ? 'page' : undefined" @click="navOpen = false">
+            <router-link v-for="it in g.items" :key="it.id" class="nav" :class="{ on: navOf(route.meta.nav) === it.id }" :to="it.to" :aria-current="navOf(route.meta.nav) === it.id ? 'page' : undefined" @click="navOpen = false">
               <Icon :n="it.icon" /><span>{{ it.label }}</span><span v-if="it.count && meta.clients" class="cnt">{{ meta.clients }}</span>
             </router-link>
           </div>
@@ -63,7 +63,7 @@ import Icon from './Icon.vue'
 import Kbar from './Kbar.vue'
 import XrayModal from './XrayModal.vue'
 import { openXray } from '../lib/xrayui.js'
-import { NAV } from '../lib/nav.js'
+import { NAV_SIDE, navOf } from '../lib/nav.js'
 import { meta, loadMeta } from '../lib/meta.js'
 import { session, post, LOGO } from '../lib/api.js'
 import { theme, applyTheme, ok, fail } from '../lib/ui.js'

@@ -2,7 +2,7 @@
   <div class="pg-backups">
     <div class="pagein i-wrap">
       <div class="i-hd">
-        <div><span class="w2-eb">клиенты, инбаунды, настройки, сертификаты</span><h1>Бэкапы</h1><p>Бэкап — zip с базой панели, сертификатами и ключами. Восстановление заменяет всё текущее; перед ним автоматически делается страховочная копия.</p></div>
+        <div><span class="w2-eb"><router-link to="/settings">Настройки</router-link> · клиенты, инбаунды, настройки, сертификаты</span><h1>Бэкапы</h1><p>Бэкап — zip с базой панели, сертификатами и ключами. Восстановление заменяет всё текущее; перед ним автоматически делается страховочная копия.</p></div>
         <div class="i-hd-a">
           <button class="btn" type="button" :disabled="busy.up" @click="fileIn.click()"><span v-if="busy.up" class="spin"></span><Icon v-else n="upload" />Загрузить бэкап</button>
           <button class="btn btn-p" type="button" :disabled="busy.create" @click="create"><span v-if="busy.create" class="spin"></span><Icon v-else n="plus" />Создать бэкап</button>

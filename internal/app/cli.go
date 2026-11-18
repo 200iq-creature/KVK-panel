@@ -1,6 +1,7 @@
 package app
 
 import (
+	"encoding/base64"
 	"flag"
 	"fmt"
 	"log"
@@ -143,6 +144,24 @@ func Main(args []string) int {
 	case "https-off":
 		st.Update(func(d *Data) error { d.Settings.PanelCertID = ""; return nil })
 		fmt.Println("HTTPS панели выключен — панель снова доступна по http")
+	case "apikey", "api-key", "link-key":
+		var tok, u string
+		var d0 Data
+		st.Read(func(d *Data) { d0 = *d })
+		if d0.Settings.PublicHost == "" {
+			d0.Settings.PublicHost = detectPublicIP()
+		}
+		tok, u = d0.Settings.APIToken, a.panelURLLocked(&d0)
+		if tok == "" {
+			fmt.Fprintln(os.Stderr, "API-токен ещё не создан — запустите панель или выполните reset-token")
+			return 1
+		}
+		fmt.Println("Ключ связки (вставьте на основном сервере → «Связка серверов» → «Добавить сервер»):")
+		fmt.Println()
+		fmt.Println("  " + base64.RawURLEncoding.EncodeToString([]byte(u+"|"+tok)))
+		fmt.Println()
+		fmt.Println("Адрес панели: " + u)
+		fmt.Println("API-токен:    " + tok)
 	case "reset-token":
 		var t string
 		st.Update(func(d *Data) error { d.Settings.APIToken = RandomHex(32); t = d.Settings.APIToken; return nil })
@@ -207,6 +226,7 @@ func printHelp() {
   reset-creds [U] [P]  сбросить логин и пароль (случайные, если не заданы)
   2fa-off              отключить двухфакторную защиту
   https-off            выключить HTTPS панели
+  apikey               ключ связки серверов и API-токен
   reset-token          перевыпустить API-токен
   backup               создать бэкап
   restore FILE         восстановить бэкап
