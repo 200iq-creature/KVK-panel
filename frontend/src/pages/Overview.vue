@@ -3,7 +3,7 @@
     <div class="pagein i-wrap">
       <div class="i-hd">
         <div><span class="dz-eb">панель · {{ d?.node || meta.node }} · <span class="i-mono">{{ d?.host || meta.host }}</span></span><h1>Обзор</h1></div>
-        <div class="i-hd-a row"><router-link v-if="!meta.inbounds" class="btn" to="/vless"><Icon n="bolt" />VLESS за минуту</router-link><router-link class="btn btn-p" to="/clients?new=1"><Icon n="plus" />Создать клиента</router-link></div>
+        <div class="i-hd-a row"><router-link v-if="!meta.inbounds" class="btn" to="/site"><Icon n="bolt" />Сайт и VLESS</router-link><router-link class="btn btn-p" to="/clients?new=1"><Icon n="plus" />Создать клиента</router-link></div>
       </div>
       <Loading v-if="!d" :error="error" @retry="reload" />
       <template v-else>

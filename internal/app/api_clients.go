@@ -162,7 +162,7 @@ func (a *App) applyClientReq(d *Data, c *Client, req clientReq, isNew bool) erro
 	if req.Inbounds != nil {
 		ids := []string{}
 		for _, id := range *req.Inbounds {
-			if d.InboundByID(id) != nil {
+			if d.ValidInboundID(id) {
 				ids = append(ids, id)
 			}
 		}
@@ -209,12 +209,7 @@ func (a *App) apiClientCreate(w http.ResponseWriter, r *http.Request) error {
 			req.Name = &empty
 		}
 		if req.Inbounds == nil {
-			all := []string{}
-			for _, in := range d.Inbounds {
-				if in.Enabled {
-					all = append(all, in.ID)
-				}
-			}
+			all := d.DefaultGrant()
 			req.Inbounds = &all
 		}
 		if err := a.applyClientReq(d, c, req, true); err != nil {
@@ -379,6 +374,13 @@ func clientAction(d *Data, c *Client, action string, days float64, tag string) e
 		for _, in := range d.Inbounds {
 			if !c.HasInbound(in.ID) {
 				c.Inbounds = append(c.Inbounds, in.ID)
+			}
+		}
+		for _, n := range d.Nodes {
+			for _, id := range n.InboundIDs() {
+				if !c.HasInbound(id) {
+					c.Inbounds = append(c.Inbounds, id)
+				}
 			}
 		}
 	default:
@@ -572,12 +574,7 @@ func (a *App) apiClientsImport(w http.ResponseWriter, r *http.Request) error {
 	}
 	added, skipped := 0, 0
 	err := a.Store.Update(func(d *Data) error {
-		all := []string{}
-		for _, in := range d.Inbounds {
-			if in.Enabled {
-				all = append(all, in.ID)
-			}
-		}
+		all := d.DefaultGrant()
 		for _, it := range items {
 			if it.UUID != "" {
 				dup := false

@@ -3,21 +3,22 @@
     <div class="pagein i-wrap">
       <div class="i-hd">
         <div>
-          <span class="vw-eb">автонастройка · Reality + фейк-сайт + CDN</span>
-          <h1>VLESS за минуту</h1>
-          <p>Укажите свои домены — панель сама поднимет сайт-прикрытие, создаст VLESS Reality и запасной вход через Cloudflare CDN, выпустит сертификаты, откроет порты и выдаст готовые ссылки. Вручную ничего настраивать не нужно.</p>
+          <span class="vw-eb">{{ srvName }} · сайт-прикрытие</span>
+          <h1>Сайт</h1>
+          <p>Обычный сайт на ваших доменах — его видят браузеры, поисковики и сканеры. Выберите домены — панель сама поднимет сайт, выпустит сертификаты Let's Encrypt и откроет порт. Подключения здесь не создаются: VLESS и остальные протоколы настраивает <router-link to="/autosetup">«Автонастройка»</router-link>.</p>
         </div>
         <div v-if="d?.settings?.enabled && !editing" class="i-hd-a row">
           <button class="btn" type="button" :disabled="busy.check" @click="selfCheck"><span v-if="busy.check" class="spin"></span><Icon v-else n="shield" />Проверить работу</button>
-          <button class="btn btn-p" type="button" @click="startEdit"><Icon n="edit" />Перенастроить</button>
+          <button class="btn btn-p" type="button" @click="startEdit"><Icon n="edit" />Домены сайта</button>
         </div>
       </div>
+      <ServerPicker />
 
       <Loading v-if="!d" />
       <template v-else>
         <!-- live progress -->
         <section v-if="st.steps?.length && (st.running || showRun)" class="i-pn">
-          <div class="i-ph"><h2>Ход настройки</h2><span class="i-stt" :class="st.running ? 'wa' : st.error ? 'bad' : 'ok'">{{ st.running ? 'идёт настройка' : st.error ? 'не завершена' : 'готово' }}</span></div>
+          <div class="i-ph"><h2>Запуск сайта</h2><span class="i-stt" :class="st.running ? 'wa' : st.error ? 'bad' : 'ok'">{{ st.running ? 'идёт настройка' : st.error ? 'не завершена' : 'готово' }}</span></div>
           <div class="i-pb">
             <ol class="au-steps">
               <li v-for="(s, i) in st.steps" :key="s.key" :class="s.status">
@@ -33,33 +34,16 @@
 
         <!-- current setup -->
         <template v-if="d.settings.enabled && !editing">
-          <div class="i-c2">
+          <div class="au-one">
             <section class="i-pn">
-              <div class="i-ph"><h2>Подключения</h2><span v-if="d.sampleClient" class="muted">ссылки клиента «{{ d.sampleClient }}»</span></div>
-              <div class="i-pb">
-                <div v-if="!d.links.length" class="i-hint wa"><Icon n="info" /><span>У автоинбаундов пока нет клиентов. <router-link to="/clients">Создайте клиента</router-link> и выдайте ему «Reality» и «CDN».</span></div>
-                <div v-for="l in d.links" :key="l.link" class="au-link">
-                  <span class="au-ic" :class="l.security === 'reality' ? '' : 'cdn'"><Icon :n="l.security === 'reality' ? 'bolt' : 'globe'" /></span>
-                  <span class="au-lt"><b>{{ kind(l).t }}</b><small>{{ kind(l).s }}</small></span>
-                  <button class="btn btn-sm btn-g btn-ic" type="button" title="QR-код" @click="qr = l"><Icon n="qr" /></button>
-                  <button class="btn btn-sm" type="button" @click="copy(l.link)"><Icon n="copy" />Копировать</button>
-                </div>
-                <div v-if="d.subUrl" class="au-sub">
-                  <span class="lbl">Подписка (все подключения сразу)</span>
-                  <div class="row"><code class="grow">{{ d.subUrl }}</code><button class="btn btn-sm btn-g btn-ic" type="button" title="QR-код" @click="qr = { name: 'Подписка', link: d.subUrl }"><Icon n="qr" /></button><button class="btn btn-sm" type="button" @click="copy(d.subUrl)"><Icon n="copy" />Копировать</button></div>
-                </div>
-                <p class="hint">Reality — основной быстрый вход, подключается к IP сервера напрямую. CDN-входы идут через Cloudflare и работают, даже если IP сервера заблокируют: XHTTP — для приложений на Xray, WebSocket — для приложений на sing-box и Clash (у них нет XHTTP). По подписке каждое приложение само получает подходящий вариант. Клиенты из раздела <router-link to="/clients">«Клиенты»</router-link> получают все эти подключения в подписке.</p>
-              </div>
-            </section>
-
-            <section class="i-pn">
-              <div class="i-ph"><h2>Состояние</h2><span class="i-stt" :class="d.site.running ? 'ok' : 'bad'">{{ d.site.running ? 'сайт работает' : 'сайт остановлен' }}</span></div>
+              <div class="i-ph"><h2>Сайт</h2><span class="i-stt" :class="d.site.running ? 'ok' : 'bad'">{{ d.site.running ? 'сайт работает' : 'сайт остановлен' }}</span></div>
               <div class="i-pb">
                 <div class="i-kv">
-                  <Kr k="Сервер" :v="d.serverIp" code />
-                  <Kr k="SNI Reality" :v="d.settings.sni" code />
-                  <Kr k="Порт" :v="d.settings.port" />
-                  <Kr k="CDN-домены" :v="(d.settings.cdnDomains || []).join(', ') || 'выключено'" />
+                  <Kr k="Сервер" :v="srvName + ' · ' + d.serverIp" code />
+                  <Kr k="Домены сайта" :v="(d.settings.domains || []).join(', ')" />
+                  <Kr k="Основной домен" :v="d.settings.sni" code />
+                  <Kr k="Порт" :v="d.settings.port + (d.site.public ? ' · сайт открыт напрямую' : hasReality ? ' · за VLESS Reality' : '')" />
+                  <Kr v-if="hasReality" k="VLESS Reality" :v="'работает за сайтом: маска (SNI) — ' + d.settings.sni" />
                   <Kr k="HTTP → HTTPS" :v="d.site.port80 ? 'порт 80 обслуживает панель' : 'порт 80 недоступен'" />
                   <Kr k="Настроено" :v="dt(d.settings.setupAt)" />
                 </div>
@@ -76,9 +60,9 @@
                   <div v-for="c in checks.checks" :key="c" class="au-chk" :class="/не |ошибка|недоступ|закрыт/i.test(c) ? 'bad' : 'ok'"><Icon :n="/не |ошибка|недоступ|закрыт/i.test(c) ? 'warn' : 'check'" />{{ c }}</div>
                 </div>
                 <div class="ft">
-                  <button class="btn btn-sm btn-danger-g" type="button" @click="remove"><Icon n="trash" />Удалить автонастройку</button>
+                  <button class="btn btn-sm btn-danger-g" type="button" @click="remove"><Icon n="trash" />Остановить сайт</button>
                   <span class="grow"></span>
-                  <router-link class="btn btn-sm btn-g" to="/inbounds">Инбаунды</router-link>
+                  <router-link class="btn btn-sm btn-g" to="/autosetup">Автонастройка</router-link>
                   <router-link class="btn btn-sm btn-g" to="/domains">Домены</router-link>
                 </div>
               </div>
@@ -90,9 +74,12 @@
         <template v-if="!d.settings.enabled || editing">
           <div class="au-grid">
             <section class="i-pn">
-              <div class="i-ph"><h2><span class="vw-num">1</span> Домены</h2><span class="muted">от 1 до 10 · чем больше, тем надёжнее</span></div>
+              <div class="i-ph"><h2><span class="vw-num">1</span> Домены сайта</h2><span class="muted">от 1 до 10 · чем больше, тем надёжнее</span></div>
               <div class="i-pb">
-                <p class="hint">Подойдут любые домены и поддомены, которыми вы управляете. На всех будет один и тот же сайт-прикрытие — так сервер выглядит как обычный сайт. Один из доменов станет «маской» (SNI) для Reality.</p>
+                <p class="hint">Выберите домены из раздела «Домены» сервера «{{ srvName }}» или впишите новые — подойдут любые домены и поддомены, которыми вы управляете. На всех будет один и тот же сайт — так сервер выглядит как обычный сайт. Домены должны вести на IP этого сервера ({{ d.serverIp }}).</p>
+                <div v-if="pickable.length" class="au-pick">
+                  <button v-for="dm in pickable" :key="dm.id" type="button" class="au-chip" :title="dm.panelOf ? 'На этом домене открывается панель — сайт будет на другом порту, это не мешает' : ''" @click="pickDomain(dm.name)"><Icon n="plus" /><code>{{ dm.name }}</code><small v-if="dm.panelOf">панель «{{ dm.panelOf }}»</small><small v-else-if="dm.usedBy?.length">{{ dm.usedBy.join(', ') }}</small></button>
+                </div>
                 <div class="au-add">
                   <input v-model="newDom" class="inp mono" placeholder="example.com или site.example.com" @keydown.enter.prevent="addDomain" @paste="onPaste">
                   <button class="btn" type="button" :disabled="!newDom.trim()" @click="addDomain"><Icon n="plus" />Добавить</button>
@@ -100,35 +87,32 @@
                 <div v-if="f.domains.length" class="au-doms">
                   <div v-for="(dm, i) in f.domains" :key="dm.name" class="au-dom" :class="{ sni: f.sni === dm.name }">
                     <div class="au-dh">
-                      <button class="au-rd" type="button" :class="{ on: f.sni === dm.name }" :title="'Сделать маской Reality (SNI)'" @click="f.sni = dm.name"></button>
-                      <span class="au-dn"><code>{{ dm.name }}</code><small>{{ f.sni === dm.name ? 'маска Reality (SNI)' : 'нажмите кружок, чтобы сделать маской' }}</small></span>
+                      <button class="au-rd" type="button" :class="{ on: f.sni === dm.name }" :title="'Сделать основным доменом'" @click="f.sni = dm.name"></button>
+                      <span class="au-dn"><code>{{ dm.name }}</code><small>{{ f.sni === dm.name ? (hasReality ? 'основной домен · маска Reality (SNI)' : 'основной домен') : 'нажмите кружок, чтобы сделать основным' }}<template v-if="domInfo(dm.name)?.panelOf"> · здесь панель «{{ domInfo(dm.name).panelOf }}»</template></small></span>
                       <span v-if="dnsOf(dm.name)" class="au-dns" :class="DNS[dnsOf(dm.name).status]?.[1]" :title="(dnsOf(dm.name).ips || []).join(', ')">{{ DNS[dnsOf(dm.name).status]?.[0] }}</span>
                       <button class="btn btn-sm btn-g btn-ic" type="button" aria-label="Убрать" @click="f.domains.splice(i, 1); fixSni()"><Icon n="x" /></button>
                     </div>
-                    <div class="au-dp">
+                    <div v-if="isFree(dm.name)" class="au-dp"><span><b>Бесплатный домен</b><small>его DNS ведёт сервис — Cloudflare-прокси недоступен</small></span></div>
+                    <div v-else class="au-dp">
                       <Tg v-model="dm.proxy" />
-                      <span><b>Cloudflare-прокси</b> <em class="au-or" :class="{ on: dm.proxy }"></em><small>{{ dm.proxy ? 'оранжевое облако: сайт за Cloudflare, домен даёт CDN-вход' : 'серое облако / не Cloudflare: только Reality' }}</small></span>
+                      <span><b>Cloudflare-прокси</b> <em class="au-or" :class="{ on: dm.proxy }"></em><small>{{ dm.proxy ? 'оранжевое облако: сайт за Cloudflare, IP сервера скрыт' : 'серое облако / не Cloudflare: сайт открывается напрямую' }}</small></span>
                     </div>
                     <p v-if="dnsOf(dm.name)?.status === 'none' || dnsOf(dm.name)?.status === 'other'" class="hint wa-t">{{ dnsOf(dm.name).status === 'none' ? 'Нет A-записи.' : 'A-запись указывает не на этот сервер (' + (dnsOf(dm.name).ips || []).join(', ') + ').' }} {{ cfOn ? 'Панель исправит её через Cloudflare API.' : `Создайте A-запись на ${chk?.serverIp || d.serverIp} или включите управление DNS ниже.` }}</p>
                   </div>
                 </div>
                 <Empty v-else icon="globe" title="Добавьте хотя бы один домен" text="Можно вставить сразу несколько — через пробел, запятую или с новой строки." />
-                <div class="i-hint"><Icon n="info" /><span><b>Совет:</b> включите <b>Cloudflare-прокси (оранжевое облако)</b> на доменах сайта. Посетители и сканеры увидят сайт за Cloudflare и не узнают IP сервера, а подписка получит запасной вход через CDN — он работает, даже если IP сервера заблокируют. Reality при этом подключается к серверу напрямую. С 2–3 доменами надёжнее: если один попадёт под блокировку, остальные продолжат работать.</span></div>
+                <div v-if="!pickable.length && !f.domains.length" class="i-hint"><Icon n="star" /><span><b>Нет своего домена?</b> В разделе <router-link to="/domains">«Домены»</router-link> нажмите «Бесплатный домен» — имя появится за секунды, без покупки и регистрации, и сразу окажется в списке выше.</span></div>
+                <div class="i-hint"><Icon n="info" /><span><b>Совет:</b> включите <b>Cloudflare-прокси (оранжевое облако)</b> на доменах, которые просто показывают сайт, — посетители и сканеры не узнают IP сервера. Основной домен, который служит маской Reality, должен вести на сервер напрямую (серое облако).</span></div>
               </div>
             </section>
 
             <div class="au-side">
               <section class="i-pn">
-                <div class="i-ph"><h2><span class="vw-num">2</span> Порт и опции</h2></div>
+                <div class="i-ph"><h2><span class="vw-num">2</span> Порт и сертификаты</h2></div>
                 <div class="i-pb">
-                  <div class="fld"><label class="lbl">Порт Reality и сайта</label>
+                  <div class="fld"><label class="lbl">Порт сайта</label>
                     <div class="row"><input v-model.number="f.port" class="inp" type="number" min="1" max="65535" style="max-width:140px"><Seg v-model="f.port" :options="[{ v: 443, l: '443' }, { v: 8443, l: '8443' }, { v: 2053, l: '2053' }]" /></div>
-                    <p class="hint" :class="chk?.port && !chk.port.free ? 'bad-t' : ''">{{ chk?.port ? (chk.port.free ? 'порт свободен' : chk.port.reason) : '443 — лучший выбор: так выглядит любой обычный сайт' }}{{ chk?.port?.free && !chk.port.cdnOk && f.cdn ? ' · Cloudflare не проксирует этот порт — CDN-вход не заработает, выберите 443, 2053, 2083, 2087, 2096 или 8443' : '' }}</p>
-                  </div>
-                  <div class="vw-tgl">
-                    <TgRow v-model="f.cdn" bold label="Запасной вход через CDN" hint="VLESS XHTTP за сайтом — для доменов с оранжевым облаком" />
-                    <TgRow v-model="f.grantAll" bold label="Выдать всем клиентам" :hint="`новые подключения появятся в подписке у ${d.clients} ${plural(d.clients, 'клиента', 'клиентов', 'клиентов')}`" />
-                    <TgRow v-model="f.createClient" bold label="Создать первого клиента" hint="если клиентов ещё нет — чтобы сразу получить ссылку" />
+                    <p class="hint" :class="chk?.port && !chk.port.free ? 'bad-t' : ''">{{ chk?.port ? (chk.port.free ? 'порт свободен' : chk.port.reason) : '443 — лучший выбор: так выглядит любой обычный сайт' }}{{ chk?.port?.free && !chk.port.cdnOk && cdnList.length ? ' · Cloudflare не проксирует этот порт — выберите 443, 2053, 2083, 2087, 2096 или 8443' : '' }}</p>
                   </div>
                   <div class="fld"><label class="lbl">E-mail для Let's Encrypt <span class="muted">· необязательно</span></label><input v-model="f.email" class="inp" type="email" placeholder="для писем об истечении сертификатов"></div>
                 </div>
@@ -146,23 +130,22 @@
                       <p v-if="chk?.cf?.ok && missingZones.length" class="hint wa-t">Токен не видит зону для: {{ missingZones.join(', ') }}</p>
                     </div>
                   </template>
-                  <p v-else class="hint">Без токена создайте A-записи на <code>{{ chk?.serverIp || d.serverIp }}</code> сами и включите оранжевое облако для доменов с CDN; в Cloudflare → SSL/TLS выберите режим <b>Full</b>.</p>
+                  <p v-else class="hint">Без токена создайте A-записи на <code>{{ chk?.serverIp || d.serverIp }}</code> сами; для доменов с оранжевым облаком в Cloudflare → SSL/TLS выберите режим <b>Full</b>.</p>
                 </div>
               </section>
 
               <section class="i-pn au-go">
                 <div class="i-pb">
                   <div class="steps small">
-                    <div class="step"><i>✓</i><span>сайт-прикрытие на {{ f.domains.length ? f.domains.map(x => x.name).join(', ') : 'ваших доменах' }}</span></div>
-                    <div class="step"><i>✓</i><span>VLESS Reality (Vision) на порту {{ f.port }}, маска {{ f.sni || '—' }}</span></div>
-                    <div v-if="f.cdn" class="step"><i>✓</i><span>VLESS через CDN (XHTTP + WebSocket для sing-box/Clash): {{ cdnList.length ? cdnList.join(', ') : 'включите облако хотя бы для одного домена' }}</span></div>
-                    <div class="step"><i>✓</i><span>сертификаты Let's Encrypt и их продление, открытые порты</span></div>
+                    <div class="step"><i>✓</i><span>сайт на {{ f.domains.length ? f.domains.map(x => x.name).join(', ') : 'ваших доменах' }}, порт {{ f.port }}</span></div>
+                    <div class="step"><i>✓</i><span>сертификаты Let's Encrypt и их продление, HTTP → HTTPS, открытый порт</span></div>
+                    <div v-if="hasReality" class="step"><i>✓</i><span>VLESS Reality этого сервера переключится на новые домены</span></div>
                   </div>
                   <div class="ft">
                     <button v-if="editing" class="btn btn-g" type="button" @click="editing = false">Отмена</button>
                     <button class="btn" type="button" :disabled="busy.chk || !f.domains.length" @click="check"><span v-if="busy.chk" class="spin"></span><Icon v-else n="search" />Проверить</button>
                     <span class="grow"></span>
-                    <button class="btn btn-p" type="button" :disabled="st.running || !f.domains.length || busy.run" @click="run"><span v-if="st.running || busy.run" class="spin"></span><Icon v-else n="bolt" />{{ st.running ? 'Настраиваю…' : 'Настроить всё' }}</button>
+                    <button class="btn btn-p" type="button" :disabled="st.running || !f.domains.length || busy.run" @click="run"><span v-if="st.running || busy.run" class="spin"></span><Icon v-else n="bolt" />{{ st.running ? 'Запускаю…' : 'Запустить сайт' }}</button>
                   </div>
                 </div>
               </section>
@@ -188,20 +171,17 @@
                 <span v-if="html !== (d.settings.customHtml || '')" class="muted small">есть несохранённые изменения</span>
                 <button class="btn btn-p" type="button" :disabled="busy.html || html === (d.settings.customHtml || '')" @click="saveHtml"><span v-if="busy.html" class="spin"></span>Сохранить</button>
               </div>
-              <p class="hint">Одна страница: стили и картинки лучше встроить в неё (inline / data:). Все остальные адреса сайта отвечают «404», кроме секретного пути CDN.</p>
+              <p class="hint">Одна страница: стили и картинки лучше встроить в неё (inline / data:). Все остальные адреса сайта отвечают «404».</p>
             </div>
           </div>
         </section>
       </template>
     </div>
 
-    <Drawer :open="!!qr" :title="qr?.name || ''" eyebrow="QR-код" width="min(420px, calc(100% - 24px))" @close="qr = null">
-      <div v-if="qr" class="qr-wrap" style="display:flex;flex-direction:column;align-items:center;gap:12px"><Qr :text="qr.link" :size="300" /><code style="word-break:break-all;font-size:12px">{{ qr.link }}</code><button class="btn" type="button" @click="copy(qr.link)"><Icon n="copy" />Копировать</button></div>
-    </Drawer>
   </div>
 </template>
 <script setup>
-import { ref, reactive, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, reactive, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import Icon from '../components/Icon.vue'
 import Loading from '../components/Loading.vue'
 import Empty from '../components/Empty.vue'
@@ -209,11 +189,10 @@ import Tg from '../components/Tg.vue'
 import TgRow from '../components/TgRow.vue'
 import Seg from '../components/Seg.vue'
 import Kr from '../components/Kr.vue'
-import Qr from '../components/Qr.vue'
-import Drawer from '../components/Drawer.vue'
-import { get, post, put, del, BASE } from '../lib/api.js'
-import { ok, fail, confirm, copy } from '../lib/ui.js'
-import { dt, date, plural } from '../lib/fmt.js'
+import ServerPicker from '../components/ServerPicker.vue'
+import { srv, sget as get, spost as post, sput as put, sdel as del, surl, srvName } from '../lib/server.js'
+import { ok, fail, confirm } from '../lib/ui.js'
+import { dt, date } from '../lib/fmt.js'
 import { loadMeta } from '../lib/meta.js'
 
 const DNS = { direct: ['→ этот сервер', 'ok'], cloudflare: ['☁ Cloudflare', 'cf'], other: ['другой IP', 'wa'], none: ['нет A-записи', 'wa'], invalid: ['ошибка', 'bad'] }
@@ -223,25 +202,26 @@ const chk = ref(null)
 const checks = ref(null)
 const editing = ref(false)
 const showRun = ref(false)
-const qr = ref(null)
 const newDom = ref('')
 const siteTab = ref('view')
 const html = ref('')
 const frameKey = ref(0)
 const busy = reactive({ chk: false, run: false, check: false, html: false })
-const f = reactive({ domains: [], sni: '', port: 443, cdn: true, grantAll: true, createClient: true, email: '', cfManage: false, cfToken: '' })
-const previewUrl = computed(() => BASE + 'api/autosetup/preview?k=' + frameKey.value)
+const f = reactive({ domains: [], sni: '', port: 443, email: '', cfManage: false, cfToken: '' })
+const hasReality = computed(() => (d.value?.inbounds || []).some(i => i.auto === 'reality'))
+const previewUrl = computed(() => surl('autosetup/preview') + '?k=' + frameKey.value + '&s=' + (srv.id || 'self'))
+const doms = ref([])
+const domInfo = (n) => doms.value.find(x => x.name === n)
+const pickable = computed(() => doms.value.filter(x => x.kind === 'domain' && !f.domains.some(y => y.name === x.name)))
+function pickDomain(n) { newDom.value = n; addDomain() }
+async function loadDoms() { try { doms.value = (await get('domains')).domains || [] } catch { doms.value = [] } }
 const cfOn = computed(() => f.cfManage && (f.cfToken || d.value?.cfTokenSet))
 const cdnList = computed(() => f.domains.filter(x => x.proxy).map(x => x.name))
 const missingZones = computed(() => Object.entries(chk.value?.cf?.zones || {}).filter(([, z]) => !z).map(([n]) => n))
-const kind = (l) => l.security === 'reality'
-  ? { t: 'Reality · напрямую', s: 'все приложения · IP сервера, маска ' + (l.link.match(/sni=([^&]+)/)?.[1] || '') }
-  : l.network === 'ws'
-    ? { t: 'CDN · WebSocket · ' + host(l), s: 'Hiddify, sing-box, NekoBox, Throne, Karing, Clash/mihomo' }
-    : { t: 'CDN · XHTTP · ' + host(l), s: 'v2rayN, v2rayNG, Happ, Streisand, V2Box' }
-const host = (l) => l.link.match(/@([^:/?#]+)/)?.[1] || ''
 const dnsOf = (n) => (chk.value?.domains || []).find(x => x.name === n)
 
+// names under these services can't be put behind Cloudflare
+const isFree = (n) => /\.(sslip\.io|nip\.io|freemyip\.com|myaddr\.(tools|dev|io))$/.test(n)
 const norm = (s) => s.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/[/:].*$/, '').replace(/\.$/, '')
 function addDomain() {
   for (const raw of newDom.value.split(/[\s,;]+/)) {
@@ -250,7 +230,7 @@ function addDomain() {
     if (!/^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z][a-z0-9-]{1,62}$/.test(n)) { fail('Некорректный домен: ' + n); continue }
     if (f.domains.some(x => x.name === n)) continue
     if (f.domains.length >= 10) { fail('Не больше 10 доменов'); break }
-    f.domains.push({ name: n, proxy: true })
+    f.domains.push({ name: n, proxy: !isFree(n) })
   }
   newDom.value = ''
   fixSni()
@@ -262,6 +242,7 @@ async function load() {
   try {
     const r = await get('autosetup')
     d.value = r; st.value = r.state || {}
+    loadDoms()
     if (!editing.value && !f.domains.length) fillForm()
     if (html.value === '' || html.value === (d.value.settings.customHtml || '')) html.value = r.settings.customHtml || ''
   } catch (e) { fail(e) }
@@ -270,7 +251,7 @@ function fillForm() {
   const s = d.value.settings
   if (s.domains?.length) {
     f.domains = s.domains.map(n => ({ name: n, proxy: (s.cdnDomains || []).includes(n) }))
-    f.sni = s.sni || s.domains[0]; f.port = s.port || 443; f.cdn = s.cdn ?? true; f.email = s.email || ''
+    f.sni = s.sni || s.domains[0]; f.port = s.port || 443; f.email = s.email || ''
   }
   f.cfManage = !!d.value.cfTokenSet
 }
@@ -285,11 +266,10 @@ async function check() {
 }
 async function run() {
   if (!f.domains.length) return
-  if (f.cdn && !cdnList.value.length && !await confirm('CDN-вход не заработает', 'Ни для одного домена не включён Cloudflare-прокси. Продолжить только с Reality?', { okText: 'Продолжить' })) return
-  if (d.value.settings.enabled && !await confirm('Перенастроить?', 'Автоинбаунды будут пересозданы с новыми параметрами — ключи Reality сохранятся, ссылки клиентов обновятся в подписке.', { okText: 'Перенастроить' })) return
+  if (hasReality.value && f.domains.find(x => x.name === f.sni)?.proxy && !await confirm('Основной домен за Cloudflare', `На этом сервере работает VLESS Reality, его маска — основной домен. Под оранжевым облаком ${f.sni} будет вести на Cloudflare, а не на сервер. Всё равно продолжить?`, { okText: 'Продолжить' })) return
   busy.run = true
   try {
-    await post('autosetup/run', { domains: f.domains, sni: f.sni, port: Number(f.port) || 443, cdn: f.cdn, grantAll: f.grantAll, createClient: f.createClient, email: f.email, cfToken: f.cfToken, cfManage: f.cfManage })
+    await post('autosetup/run', { siteOnly: true, domains: f.domains, sni: f.sni, port: Number(f.port) || 443, cdn: false, email: f.email, cfToken: f.cfToken, cfManage: f.cfManage })
     showRun.value = true
     poll()
   } catch (e) { fail(e) } finally { busy.run = false }
@@ -304,15 +284,15 @@ async function poll() {
     if (prev !== false) {
       showRun.value = true
       await load(); loadMeta(); frameKey.value++
-      if (!st.value.error) { editing.value = false; ok('Готово — ссылки ниже') }
+      if (!st.value.error) { editing.value = false; ok('Сайт работает') }
     }
   } catch { pt = setTimeout(poll, 2000) }
 }
 async function selfCheck() { busy.check = true; try { checks.value = await post('autosetup/selfcheck'); checks.value.ok ? ok('Всё работает') : fail('Есть проблемы — смотрите список') } catch (e) { fail(e) } finally { busy.check = false } }
 async function reissue(c) { try { await post(`domains/${c.id}/issue`); ok('Выпуск запущен'); setTimeout(load, 1500) } catch (e) { fail(e) } }
 async function remove() {
-  if (!await confirm('Удалить автонастройку?', 'Инбаунды «Reality» и «CDN» будут удалены, сайт-прикрытие остановлен. Клиенты и сертификаты останутся.', { danger: true, okText: 'Удалить' })) return
-  try { await del('autosetup'); ok('Автонастройка удалена'); f.domains = []; await load(); loadMeta() } catch (e) { fail(e) }
+  if (!await confirm('Остановить сайт?', hasReality.value ? 'Сайт будет остановлен, а VLESS Reality и XHTTP/WebSocket за сайтом на этом сервере — удалены (без сайта они не работают). Клиенты и сертификаты останутся.' : 'Сайт будет остановлен. Домены и сертификаты останутся.', { danger: true, okText: 'Остановить' })) return
+  try { await del('autosetup'); ok('Сайт остановлен'); f.domains = []; await load(); loadMeta() } catch (e) { fail(e) }
 }
 async function dropToken() { try { await del('autosetup/token'); f.cfToken = ''; await load(); ok('Токен удалён') } catch (e) { fail(e) } }
 async function saveHtml() {
@@ -326,6 +306,11 @@ function loadFile(e) {
   const r = new FileReader(); r.onload = () => { html.value = String(r.result || '') }; r.readAsText(file)
 }
 onMounted(async () => { await load(); if (st.value.running) { showRun.value = true; poll() } })
+watch(() => srv.id, async () => {
+  clearTimeout(pt); d.value = null; st.value = {}; chk.value = null; checks.value = null; editing.value = false; showRun.value = false; html.value = ''
+  Object.assign(f, { domains: [], sni: '', port: 443, email: '', cfManage: false, cfToken: '' })
+  await load(); if (st.value.running) { showRun.value = true; poll() }
+})
 onBeforeUnmount(() => clearTimeout(pt))
 </script>
 <style>
@@ -333,9 +318,16 @@ onBeforeUnmount(() => clearTimeout(pt))
 .h1 .pg-auto .vw-eb{display:block;font-size:var(--fs-md);color:var(--muted);margin-bottom:8px}
 .h1 .pg-auto .vw-num{display:inline-grid;place-items:center;width:26px;height:26px;border-radius:var(--r-sm);background:var(--accent);color:#fff;font-size:var(--fs-sm);font-weight:600;margin-right:6px;vertical-align:1px}
 .h1 .pg-auto .i-ph h2{display:flex;align-items:center;gap:4px}
+.h1 .au-one{display:grid;grid-template-columns:minmax(0,1fr);gap:18px;max-width:920px}
 .h1 .au-grid{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:18px;align-items:start}
 .h1 .au-side{display:flex;flex-direction:column;gap:18px;min-width:0}
 .h1 .au-add{display:flex;gap:8px}.h1 .au-add .inp{flex:1}
+.h1 .au-pick{display:flex;flex-wrap:wrap;gap:6px}
+.h1 .au-chip{display:inline-flex;align-items:center;gap:6px;min-height:var(--ctlSm);padding:4px 12px 4px 8px;border-radius:99px;border:1px dashed var(--edge3);background:var(--surface);color:var(--text);font:inherit;font-size:var(--fs-sm);cursor:pointer}
+.h1 .au-chip .ic{width:14px;height:14px;color:var(--accentText)}
+.h1 .au-chip code{font-family:var(--mono);color:var(--strong)}
+.h1 .au-chip small{font-size:var(--fs-xs);color:var(--muted)}
+@media (hover:hover){.h1 .au-chip:hover{border-color:var(--accent);border-style:solid}}
 .h1 .au-doms{display:flex;flex-direction:column;gap:8px}
 .h1 .au-dom{display:flex;flex-direction:column;gap:10px;padding:12px 14px;border-radius:var(--r-lg);border:1px solid var(--line);background:var(--surface)}
 .h1 .au-dom.sni{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}

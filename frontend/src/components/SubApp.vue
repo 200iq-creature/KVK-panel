@@ -17,7 +17,7 @@
               <span class="strong">{{ d.expiresAt ? (d.status === 'expired' ? 'истекла ' + date(d.expiresAt) : 'до ' + date(d.expiresAt) + ' · ' + left(d.expiresAt)) : 'бессрочно' }}</span>
             </div>
             <template v-if="d.showTraffic">
-              <div class="row" style="justify-content:space-between;margin-top:14px"><span class="muted">Трафик</span><span><b>{{ bytes(d.up + d.down) }}</b><span class="muted"> {{ d.limit ? 'из ' + bytes(d.limit) : '· без лимита' }}</span></span></div>
+              <div class="row" style="justify-content:space-between;margin-top:14px"><span class="muted">Трафик</span><span><b>{{ bytes(d.up + d.down) }}</b><span class="muted">&nbsp;{{ d.limit ? 'из ' + bytes(d.limit) : '· без лимита' }}</span></span></div>
               <div v-if="d.limit" class="i-mpr" :class="pct > 90 ? 'bad' : pct > 70 ? 'wa' : 'ok'" style="margin-top:8px"><i :style="{ width: pct + '%' }"></i></div>
             </template>
             <div v-if="d.status !== 'active' && d.renewUrl" class="i-alrt wa" style="margin-top:14px"><Icon n="clock" /><span><b>Подписка не активна.</b> <span class="muted">Продлите её, чтобы VPN снова заработал.</span></span><a class="btn btn-sm btn-p" :href="d.renewUrl" target="_blank" rel="noopener">Продлить</a></div>
@@ -43,6 +43,23 @@
             <div class="vw-link" style="margin-top:16px;display:flex;align-items:center;gap:8px"><code class="i-mono" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ subUrl }}</code><button class="btn btn-sm" type="button" @click="copyText(subUrl, 'Ссылка подписки скопирована')"><Icon n="copy" />Копировать</button></div>
             <div style="display:flex;justify-content:center;margin-top:16px"><Qr :text="subUrl" :size="220" /></div>
             <p class="hint" style="text-align:center">Отсканируйте QR в приложении на другом устройстве</p>
+          </div>
+        </section>
+
+        <section class="i-pn">
+          <div class="i-ph"><h2>Форматы подписки</h2><span>если приложение не добавило всё</span></div>
+          <div class="i-pb">
+            <div class="list-rows">
+              <div v-for="f in formats" :key="f.id" class="lr">
+                <span class="lr-t"><b>{{ f.name }}</b><small>{{ f.note }}</small></span>
+                <span class="acts">
+                  <a v-if="f.add" class="btn btn-sm btn-g" :href="f.add">{{ f.addLabel }}</a>
+                  <button class="btn btn-sm btn-g btn-ic" type="button" title="QR" @click="qr = qr === 'f' + f.id ? -1 : 'f' + f.id"><Icon n="qr" /></button>
+                  <button class="btn btn-sm btn-g btn-ic" type="button" title="Копировать ссылку" @click="copyText(f.url, 'Ссылка скопирована')"><Icon n="copy" /></button>
+                </span>
+                <div v-if="qr === 'f' + f.id" style="flex-basis:100%;display:flex;justify-content:center;padding:8px 0"><Qr :text="f.url" :size="220" /></div>
+              </div>
+            </div>
           </div>
         </section>
 
@@ -126,6 +143,21 @@ const qr = ref(-1)
 const toast = ref('')
 const dark = ref(document.documentElement.classList.contains('dark'))
 const subUrl = computed(() => d.value?.subUrl || location.href.split('?')[0])
+const withFmt = (f) => subUrl.value + (subUrl.value.includes('?') ? '&' : '?') + 'format=' + f
+const hasMasque = computed(() => (d.value?.links || []).some(l => l.configType === 'xray-json'))
+const hasTuic = computed(() => (d.value?.links || []).some(l => l.protocol === 'tuic'))
+const formats = computed(() => {
+  const json = withFmt('json'), clash = withFmt('clash'), sb = withFmt('singbox')
+  return [
+    { id: 'json', name: 'JSON (Xray)', url: json, add: 'happ://add/' + json, addLabel: 'В Happ',
+      note: 'всё в одном файле' + (hasMasque.value ? ', включая MASQUE' : '') + ' — Happ, v2RayTun, INCY, v2rayN' },
+    { id: 'singbox', name: 'sing-box', url: sb, add: 'sing-box://import-remote-profile?url=' + enc(sb) + '#' + enc(d.value?.title || 'VPN'), addLabel: 'В sing-box',
+      note: 'готовый конфиг sing-box 1.12+' + (hasTuic.value ? ', с TUIC' : '') + ' (без XHTTP, MASQUE, AWG) — sing-box (SFA/SFI/SFM/SFW), Karing, Throne, NekoBox' },
+    { id: 'clash', name: 'Clash / Mihomo', url: clash, add: 'clash://install-config?url=' + enc(clash), addLabel: 'В FlClash',
+      note: (hasTuic.value || awg.value.length ? 'включая ' + [hasTuic.value && 'TUIC', awg.value.length && 'AmneziaWG'].filter(Boolean).join(' и ') + ' — ' : '') + 'FlClash, Clash Verge, Mihomo' },
+    { id: 'links', name: 'Ссылки (base64)', url: withFmt('base64'), note: 'Hiddify, v2rayNG, Streisand, Throne и другие' + (hasMasque.value ? ' — без MASQUE' : '') },
+  ]
+})
 const pct = computed(() => d.value?.limit ? Math.min(100, Math.round((d.value.up + d.value.down) / d.value.limit * 100)) : 0)
 function toggleTheme() { dark.value = !dark.value; document.documentElement.classList.toggle('dark', dark.value); try { localStorage.setItem('kvk-sub-theme', dark.value ? 'dark' : 'light') } catch {} }
 async function copyText(t, msg = 'Скопировано') {

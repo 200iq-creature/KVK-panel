@@ -2,12 +2,13 @@
   <div class="pg-filter">
     <div class="pagein i-wrap">
       <div class="i-hd">
-        <div><span class="w2-eb">для всех клиентов сервера</span><h1>Фильтрация</h1><p>Блокировка рекламы, трекеров, вредоносных и взрослых сайтов прямо на сервере — работает в любом приложении без настроек у клиента.</p></div>
+        <div><span class="w2-eb">{{ srvName }} · для всех клиентов сервера</span><h1>Фильтрация</h1><p>Блокировка рекламы, трекеров, вредоносных и взрослых сайтов прямо на сервере — работает в любом приложении без настроек у клиента.</p></div>
         <div class="i-hd-a">
           <button v-if="f" class="btn" type="button" :disabled="busy.check" @click="check"><span v-if="busy.check" class="spin"></span><Icon v-else n="check" />Проверить</button>
           <button v-if="f" class="btn btn-p" type="button" :disabled="busy.save || !dirty" @click="save"><span v-if="busy.save" class="spin"></span>Сохранить</button>
         </div>
       </div>
+      <ServerPicker />
       <Loading v-if="!f" :error="error" @retry="load" />
       <template v-else>
         <div class="i-mt">
@@ -55,13 +56,14 @@
 </template>
 <script setup>
 import '../styles/Filter.css'
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, watch } from 'vue'
 import Icon from '../components/Icon.vue'
 import Loading from '../components/Loading.vue'
 import Metric from '../components/Metric.vue'
 import TgRow from '../components/TgRow.vue'
 import Opt from '../components/Opt.vue'
-import { get, put, post } from '../lib/api.js'
+import ServerPicker from '../components/ServerPicker.vue'
+import { srv, sget as get, sput as put, spost as post, srvName } from '../lib/server.js'
 import { ok, fail } from '../lib/ui.js'
 
 const MODE = { lists: 'по спискам geosite', dns: 'через DNS AdGuard', custom: 'через свой DoH' }
@@ -88,4 +90,5 @@ async function load() {
 async function save() { busy.save = true; try { await put('filter', body()); ok('Фильтрация применена'); await load() } catch (e) { fail(e) } finally { busy.save = false } }
 async function check() { busy.check = true; try { const r = await post('filter/check', body()); checks.value = r.checks } catch (e) { fail(e) } finally { busy.check = false } }
 onMounted(load)
+watch(() => srv.id, () => { f.value = null; checks.value = null; load() })
 </script>

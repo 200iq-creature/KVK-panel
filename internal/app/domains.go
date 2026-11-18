@@ -6,6 +6,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -25,16 +26,40 @@ type domainView struct {
 	Panel    bool     `json:"panel"`
 	Issuing  bool     `json:"issuing"`
 	PointsOK *bool    `json:"pointsOk,omitempty"`
+	// Site: the decoy website runs on this domain (SNI: it is the Reality mask)
+	Site bool `json:"site"`
+	SNI  bool `json:"sni"`
+	// PanelOf: name of the server whose panel is opened on this domain
+	PanelOf string `json:"panelOf,omitempty"`
+	// Dyn: a freemyip / myaddr name the panel keeps pointed at the server
+	Dyn bool `json:"dyn"`
 }
 
 func (a *App) apiDomains(w http.ResponseWriter, r *http.Request) error {
 	list := []domainView{}
-	var host, panelCert, ip string
+	var host, panelCert, ip, server string
 	a.Store.Read(func(d *Data) {
 		host, panelCert = d.Settings.PublicHost, d.Settings.PanelCertID
+		server = orDefault(d.Settings.NodeName, "этот сервер")
+		panelHost := a.panelHostLocked(d)
+		nodeHosts := map[string]string{}
+		for _, n := range d.Nodes {
+			if u, err := url.Parse(n.URL); err == nil {
+				nodeHosts[strings.ToLower(u.Hostname())] = n.Name
+			}
+		}
+		fs := d.Settings.Fake
 		for _, dm := range d.Domains {
 			cp := *dm
-			v := domainView{Domain: &cp, UsedBy: []string{}, Panel: dm.ID == panelCert}
+			cp.DynToken = ""
+			v := domainView{Domain: &cp, UsedBy: []string{}, Panel: dm.ID == panelCert, Dyn: dm.DynToken != ""}
+			v.Site = fs.Enabled && containsStr(fs.Domains, dm.Name)
+			v.SNI = v.Site && fs.SNI == dm.Name
+			if v.Panel || (dm.Kind == "domain" && strings.EqualFold(panelHost, dm.Name)) {
+				v.PanelOf = server
+			} else if nm, ok := nodeHosts[strings.ToLower(dm.Name)]; ok {
+				v.PanelOf = nm
+			}
 			if dm.ExpiresAt > 0 {
 				v.DaysLeft = int(time.Until(time.UnixMilli(dm.ExpiresAt)).Hours() / 24)
 			}
@@ -43,12 +68,15 @@ func (a *App) apiDomains(w http.ResponseWriter, r *http.Request) error {
 					v.UsedBy = append(v.UsedBy, in.Remark)
 				}
 			}
+			if d.Settings.SubCertID == dm.ID {
+				v.UsedBy = append([]string{"подписка"}, v.UsedBy...)
+			}
 			_, v.Issuing = issuing.Load(dm.ID)
 			list = append(list, v)
 		}
 	})
 	ip = a.serverIP()
-	ok(w, map[string]any{"domains": list, "publicHost": host, "serverIp": ip, "panelCertId": panelCert, "panelUrl": a.panelURL()})
+	ok(w, map[string]any{"domains": list, "publicHost": host, "serverIp": ip, "panelCertId": panelCert, "panelUrl": a.panelURL(), "server": server})
 	return nil
 }
 
@@ -378,6 +406,9 @@ func (a *App) apiDomainDelete(w http.ResponseWriter, r *http.Request) error {
 		if d.Settings.PanelCertID == id {
 			return errf(409, "Сертификат используется панелью — сначала выключите HTTPS панели")
 		}
+		if d.Settings.SubCertID == id {
+			d.Settings.SubCertID = "" // subscription links go back to the panel's address
+		}
 		for _, in := range d.Inbounds {
 			if in.CertID == id {
 				return errf(409, "Сертификат используется инбаундом «%s»", in.Remark)
@@ -421,6 +452,7 @@ func (a *App) apiHostUpdate(w http.ResponseWriter, r *http.Request) error {
 
 // renewCerts renews Let's Encrypt certificates when 1/3 of lifetime remains.
 func (a *App) renewCerts() {
+	a.dynKeepAlive()
 	type job struct {
 		id string
 	}

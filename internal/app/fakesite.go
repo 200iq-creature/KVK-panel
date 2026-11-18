@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
+	"io"
 	"io/fs"
 	"log"
 	"net"
@@ -32,6 +33,10 @@ type fakeSite struct {
 	tlsPort int
 	http80  bool
 	err     string
+	// pub: the site's own public listener (0.0.0.0:Port) — used while no
+	// inbound (the Reality one from «Автонастройка») takes that port
+	pub     net.Listener
+	pubPort int
 
 	certMu sync.Mutex
 	certs  map[string]*fakeCert // by domain name
@@ -50,7 +55,7 @@ var fake = &fakeSite{certs: map[string]*fakeCert{}, self: map[string]*tls.Certif
 func (a *App) fakeStatus() map[string]any {
 	fake.mu.Lock()
 	defer fake.mu.Unlock()
-	return map[string]any{"running": fake.tlsSrv != nil, "tlsPort": fake.tlsPort, "port80": fake.http80, "error": fake.err}
+	return map[string]any{"running": fake.tlsSrv != nil, "tlsPort": fake.tlsPort, "port80": fake.http80, "error": fake.err, "public": fake.pub != nil}
 }
 
 func fakeRunning80() bool {
@@ -92,6 +97,7 @@ func (a *App) StartFakeSite() error {
 		}
 	}()
 	fake.tlsSrv, fake.tlsPort, fake.err = srv, st.TLSPort, ""
+	defer func() { go a.fakeFrontSync() }()
 	// port 80: ACME challenges, redirect to https (or the site itself for CDN "flexible" mode)
 	if ln80, err := net.Listen("tcp", ":80"); err == nil {
 		s80 := &http.Server{Handler: a.fakeHandler(true), ReadHeaderTimeout: 20 * time.Second, ErrorLog: log.New(nullWriter{}, "", 0)}
@@ -108,6 +114,10 @@ func (a *App) StopFakeSite() {
 	fake.mu.Lock()
 	servers := []*http.Server{fake.tlsSrv, fake.httpSrv}
 	fake.tlsSrv, fake.httpSrv, fake.http80 = nil, nil, false
+	if fake.pub != nil {
+		fake.pub.Close()
+		fake.pub, fake.pubPort = nil, 0
+	}
 	fake.mu.Unlock()
 	for _, s := range servers {
 		if s != nil {
@@ -344,4 +354,71 @@ func xhttpProxy(port int) *httputil.ReverseProxy {
 	}
 	proxyCache[port] = rp
 	return rp
+}
+
+// fakeFrontSync opens or closes the site's own public port. The site always
+// runs on 127.0.0.1:TLSPort; when no inbound listens on the public port
+// (Settings.Fake.Port, usually 443) the site takes that port itself and simply
+// forwards connections to the internal one. Once «Автонастройка» puts the
+// Reality inbound there, the port goes to Xray and Reality fronts the site.
+func (a *App) fakeFrontSync() {
+	var st FakeSiteSettings
+	taken := false
+	a.Store.Read(func(d *Data) {
+		st = d.Settings.Fake
+		for _, in := range d.Inbounds {
+			if in.Enabled && in.Port == st.Port && inboundL4(in) != "udp" && !strings.HasPrefix(in.Listen, "127.") {
+				taken = true
+			}
+		}
+	})
+	fake.mu.Lock()
+	defer fake.mu.Unlock()
+	want := st.Enabled && st.Port > 0 && !taken && fake.tlsSrv != nil && fake.tlsPort > 0
+	if fake.pub != nil && (!want || fake.pubPort != st.Port) {
+		fake.pub.Close()
+		fake.pub, fake.pubPort = nil, 0
+	}
+	if !want || fake.pub != nil {
+		return
+	}
+	ln, err := net.Listen("tcp", ":"+strconv.Itoa(st.Port))
+	if err != nil {
+		return // Xray still holds it — the next sync (after Xray restarts) retries
+	}
+	fake.pub, fake.pubPort = ln, st.Port
+	target := "127.0.0.1:" + strconv.Itoa(fake.tlsPort)
+	go func() {
+		for {
+			c, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			go pipeTCP(c, target)
+		}
+	}()
+	go OpenFirewallPort(st.Port, "tcp")
+}
+
+// fakePubPort: the public port the site holds itself (0 if none).
+func fakePubPort() int {
+	fake.mu.Lock()
+	defer fake.mu.Unlock()
+	if fake.pub == nil {
+		return 0
+	}
+	return fake.pubPort
+}
+
+func pipeTCP(c net.Conn, target string) {
+	defer c.Close()
+	u, err := net.DialTimeout("tcp", target, 5*time.Second)
+	if err != nil {
+		return
+	}
+	defer u.Close()
+	done := make(chan struct{}, 2)
+	go func() { _, _ = io.Copy(u, c); done <- struct{}{} }()
+	go func() { _, _ = io.Copy(c, u); done <- struct{}{} }()
+	<-done
 }

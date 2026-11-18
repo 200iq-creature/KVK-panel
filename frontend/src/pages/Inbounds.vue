@@ -2,14 +2,15 @@
   <div class="pg-inbounds">
     <div class="pagein i-wrap">
       <div class="i-hd">
-        <div><span class="vw-eb">xray {{ xr.version || '—' }} · {{ pn(list.length, 'инбаунд', 'инбаунда', 'инбаундов') }}</span><h1>Инбаунды</h1></div>
-        <div class="i-hd-a"><button class="btn btn-p" type="button" @click="openForm(null)"><Icon n="plus" />Новый инбаунд</button></div>
+        <div><span class="vw-eb">{{ srvName }} · xray {{ xr.version || '—' }} · {{ pn(list.length, 'инбаунд', 'инбаунда', 'инбаундов') }}</span><h1>Инбаунды</h1></div>
+        <div class="i-hd-a"><router-link class="btn" to="/site"><Icon n="bolt" />Автонастройка VLESS</router-link><button class="btn btn-p" type="button" @click="openForm(null)"><Icon n="plus" />Новый инбаунд</button></div>
       </div>
+      <ServerPicker />
       <Loading v-if="!data" :error="error" @retry="reload" />
       <template v-else>
         <div class="i-mt">
           <Metric label="Инбаунды" :value="list.length" :pct="list.length ? enabled / list.length * 100 : 0" tone="ok" :note="`включено ${enabled} из ${list.length}`" />
-          <Metric label="Клиенты в инбаундах" :value="meta.clients" :note="`${list.reduce((s, i) => s + i.clients, 0)} подключений — у клиента своё в каждом`" />
+          <Metric label="Клиенты в инбаундах" :value="remote ? list.reduce((m, i) => Math.max(m, i.clients), 0) : meta.clients" :note="`${list.reduce((s, i) => s + i.clients, 0)} подключений — у клиента своё в каждом`" />
           <Metric label="Онлайн" :value="list.reduce((s, i) => s + (i.online || 0), 0)" note="подключений за последние 2 минуты" />
           <Metric label="Xray" :value="xr.version || '—'" :note="xr.running ? 'изменения применяются сразу, без разрыва остальных клиентов' : (xr.error || 'не запущен')" :note-tone="xr.running ? '' : 'bad'" />
         </div>
@@ -72,10 +73,11 @@
                   <div class="vw-xc">
                     <span class="vw-xt">Клиенты инбаунда · {{ i.clients }}</span>
                     <div class="vw-cl">
-                      <div v-for="c in (i.clientList || []).slice(0, showAll[i.id] ? 9999 : 8)" :key="c.id" class="vw-xr"><span><b>{{ c.name }}</b> <span class="vw-mu">{{ c.online ? 'онлайн' : STATUS[c.status]?.[0] }}</span></span><button class="btn btn-sm btn-g" type="button" @click="removeClient(i, c)">Убрать</button></div>
+                      <div v-for="c in (i.clientList || []).slice(0, showAll[i.id] ? 9999 : 8)" :key="c.id" class="vw-xr"><span><b>{{ c.name }}</b> <span class="vw-mu">{{ c.online ? 'онлайн' : STATUS[c.status]?.[0] }}</span></span><button v-if="!remote" class="btn btn-sm btn-g" type="button" @click="removeClient(i, c)">Убрать</button></div>
                       <button v-if="(i.clientList || []).length > 8 && !showAll[i.id]" class="btn btn-sm btn-g" type="button" @click="showAll[i.id] = true">Показать всех ({{ i.clientList.length }})</button>
                     </div>
-                    <div class="vw-add"><input v-model="addName[i.id]" class="inp" placeholder="имя клиента (пусто = новый)" @keydown.enter="addClient(i)"><button class="btn btn-sm" type="button" @click="addClient(i)"><Icon n="plus" />Добавить</button></div>
+                    <div v-if="!remote" class="vw-add"><input v-model="addName[i.id]" class="inp" placeholder="имя клиента (пусто = новый)" @keydown.enter="addClient(i)"><button class="btn btn-sm" type="button" @click="addClient(i)"><Icon n="plus" />Добавить</button></div>
+                    <p v-else class="hint">Клиенты живут на основном сервере: доступ к этому инбаунду выдаётся в карточке клиента («Изменить» → «Инбаунды») или кнопками «Выдать всем» / «Забрать у всех».</p>
                   </div>
                   <div class="vw-xc vw-xa">
                     <span class="vw-xt">Действия</span>
@@ -87,7 +89,7 @@
                 </div>
               </div>
               <Empty v-if="!list.length" icon="inb" title="Инбаундов пока нет" text="Начните с VLESS Reality на порту 443 — он лучше всего проходит блокировки">
-                <div class="row"><router-link class="btn btn-sm btn-p" to="/vless"><Icon n="bolt" />Настроить автоматически</router-link><button class="btn btn-sm" type="button" @click="openForm(null)"><Icon n="plus" />Новый инбаунд</button></div>
+                <div class="row"><router-link class="btn btn-sm btn-p" to="/site"><Icon n="bolt" />Настроить автоматически</router-link><button class="btn btn-sm" type="button" @click="openForm(null)"><Icon n="plus" />Новый инбаунд</button></div>
               </Empty>
             </div>
           </div>
@@ -106,7 +108,7 @@
 </template>
 <script setup>
 import '../styles/Inbounds.css'
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import Icon from '../components/Icon.vue'
 import Loading from '../components/Loading.vue'
@@ -114,7 +116,9 @@ import Empty from '../components/Empty.vue'
 import Metric from '../components/Metric.vue'
 import Drawer from '../components/Drawer.vue'
 import InboundForm from '../components/InboundForm.vue'
-import { get, post, put, del } from '../lib/api.js'
+import ServerPicker from '../components/ServerPicker.vue'
+import { post } from '../lib/api.js'
+import { srv, sget as get, spost, sput as put, sdel as del, srvName, remote } from '../lib/server.js'
 import { meta, loadMeta } from '../lib/meta.js'
 import { useLoad } from '../lib/useLoad.js'
 import { ok, fail, confirm, copy } from '../lib/ui.js'
@@ -124,6 +128,7 @@ import { STATUS } from '../lib/client.js'
 const route = useRoute()
 const router = useRouter()
 const { data, error, reload } = useLoad(() => get('inbounds'), { interval: 15000 })
+watch(() => srv.id, () => { data.value = null; error.value = ''; openId.value = ''; reload() })
 const list = computed(() => data.value?.inbounds || [])
 const xr = computed(() => data.value?.xray || {})
 const enabled = computed(() => list.value.filter(i => i.enabled).length)
@@ -142,16 +147,18 @@ async function save() {
   busy.save = true
   try {
     const b = fref.value.body()
-    if (form.inbound) { await put('inbounds/' + form.inbound.id, b); ok('Инбаунд сохранён') } else { await post('inbounds' + (fref.value.grant() ? '?grant=1' : ''), b); ok('Инбаунд создан') }
+    if (form.inbound) { await put('inbounds/' + form.inbound.id, b); ok('Инбаунд сохранён') } else { await spost('inbounds' + (fref.value.grant() ? '?grant=1' : ''), b); ok('Инбаунд создан' + (remote.value ? ' на сервере «' + srvName.value + '»' : '')) }
     form.open = false; await reload(true); loadMeta()
   } catch (e) { fail(e) } finally { busy.save = false }
 }
 async function run(fn, msg) { try { await fn(); if (msg) ok(msg); await reload(true) } catch (e) { fail(e) } }
-const toggle = (i) => run(() => post(`inbounds/${i.id}/toggle`), i.enabled ? 'Выключен' : 'Включён')
-const move = (i, dir) => run(() => post(`inbounds/${i.id}/move`, { dir }))
-const grant = async (i, all) => { if (all || await confirm(`Забрать «${i.remark}» у всех клиентов?`, 'Подключение пропадёт из подписок после обновления.', { danger: true, okText: 'Забрать' })) run(() => post(`inbounds/${i.id}/grant`, { all }), all ? 'Выдано всем клиентам' : 'Забрано у всех') }
+const toggle = (i) => run(() => spost(`inbounds/${i.id}/toggle`), i.enabled ? 'Выключен' : 'Включён')
+const move = (i, dir) => run(() => spost(`inbounds/${i.id}/move`, { dir }))
+// clients of linked servers live here, so their access is granted on this panel
+const grantCall = (i, all) => remote.value ? post(`nodes/${srv.id}/grant`, { inbound: i.id, all }) : spost(`inbounds/${i.id}/grant`, { all })
+const grant = async (i, all) => { if (all || await confirm(`Забрать «${i.remark}» у всех клиентов?`, 'Подключение пропадёт из подписок после обновления.', { danger: true, okText: 'Забрать' })) run(async () => { await grantCall(i, all); if (remote.value) await new Promise(r => setTimeout(r, 1500)) }, all ? 'Выдано всем клиентам' : 'Забрано у всех') }
 const removeClient = (i, c) => run(() => del(`inbounds/${i.id}/clients/${c.id}`), `${c.name} убран из инбаунда`)
-async function addClient(i) { const name = (addName[i.id] || '').trim(); await run(() => post(`inbounds/${i.id}/clients`, { name }), 'Клиент добавлен'); addName[i.id] = ''; loadMeta() }
+async function addClient(i) { const name = (addName[i.id] || '').trim(); await run(() => spost(`inbounds/${i.id}/clients`, { name }), 'Клиент добавлен'); addName[i.id] = ''; loadMeta() }
 async function exampleLink(i) { try { const r = await get(`inbounds/${i.id}/link`); copy(r.link, 'Пример ссылки скопирован') } catch (e) { fail(e) } }
 async function remove(i) {
   if (!await confirm(`Удалить «${i.remark}»?`, `Порт ${i.port} освободится, у ${pn(i.clients, 'клиента', 'клиентов', 'клиентов')} пропадёт это подключение.`, { danger: true, okText: 'Удалить' })) return

@@ -22,7 +22,7 @@ func (a *App) wrap(h handlerFn) http.HandlerFunc {
 // authed: session cookie (with CSRF header for mutations) or API token.
 func (a *App) authed(h handlerFn) http.HandlerFunc {
 	return a.wrap(func(w http.ResponseWriter, r *http.Request) error {
-		if a.checkToken(r) {
+		if a.checkToken(r) || isLocalCall(r) {
 			return h(w, r)
 		}
 		if !a.checkSession(r) {
@@ -92,6 +92,11 @@ func (a *App) apiMux() *http.ServeMux {
 	A("GET /api/autosetup/preview", a.apiAutoPreview)
 	A("DELETE /api/autosetup/token", a.apiAutoToken)
 	A("DELETE /api/autosetup", a.apiAutoDelete)
+	A("GET /api/wizard", a.apiWizGet)
+	A("PUT /api/settings/subdomain", a.apiSettingsSubDomain)
+	A("POST /api/wizard/run", a.apiWizRun)
+	A("GET /api/wizard/state", a.apiWizState)
+	A("POST /api/wizard/switch", a.apiWizSwitch)
 
 	// xray core
 	A("GET /api/xray/status", a.apiXrayStatus)
@@ -130,6 +135,10 @@ func (a *App) apiMux() *http.ServeMux {
 	// domains & certificates
 	A("GET /api/domains", a.apiDomains)
 	A("POST /api/domains", a.apiDomainCreate)
+	A("GET /api/domains/free", a.apiFreeDomainInfo)
+	A("POST /api/domains/free", a.apiFreeDomainCreate)
+	A("GET /api/domains/free/check", a.apiFreeDomainCheck)
+	A("POST /api/domains/{id}/point", a.apiFreeDomainPoint)
 	A("POST /api/domains/{id}/issue", a.apiDomainIssue)
 	A("POST /api/domains/{id}/panel", a.apiDomainPanel)
 	A("DELETE /api/domains/{id}", a.apiDomainDelete)
@@ -178,6 +187,11 @@ func (a *App) apiMux() *http.ServeMux {
 	A("PUT /api/nodes/{id}", a.apiNodeUpdate)
 	A("DELETE /api/nodes/{id}", a.apiNodeDelete)
 	A("POST /api/main/detach", a.apiMainDetach)
+	A("GET /api/nodes/{id}/profile", a.apiNodeProfile)
+	A("POST /api/nodes/{id}/accept", a.apiNodeAccept)
+	A("POST /api/nodes/{id}/restore", a.apiNodeRestore)
+	A("POST /api/nodes/{id}/grant", a.apiNodeGrant)
+	A("/api/nodes/{id}/api/{path...}", a.apiNodeProxy)
 	A("PUT /api/backups-settings", a.apiBackupSettings)
 
 	// shop bot
@@ -204,6 +218,8 @@ func (a *App) apiMux() *http.ServeMux {
 
 	m.HandleFunc("POST /api/node/sync", a.tokenOnly(a.apiNodeSyncIn))
 	m.HandleFunc("GET /api/node/info", a.tokenOnly(a.apiNodeInfo))
+	m.HandleFunc("GET /api/node/profile", a.tokenOnly(a.apiNodeProfileGet))
+	m.HandleFunc("POST /api/node/profile", a.tokenOnly(a.apiNodeProfileApply))
 
 	m.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 404, map[string]any{"error": "not found"})

@@ -16,6 +16,7 @@ import (
 
 type XrayManager struct {
 	app      *App
+	applyMu  sync.Mutex // one Apply at a time: they share xray.test.json
 	mu       sync.Mutex
 	cmd      *exec.Cmd
 	started  time.Time
@@ -142,8 +143,13 @@ func lastMeaningful(out string) string {
 
 // Apply builds config, tests it and restarts xray.
 func (x *XrayManager) Apply() error {
+	x.applyMu.Lock()
+	defer x.applyMu.Unlock()
 	x.app.prepareEmbedded()
 	defer x.app.syncEmbeddedLogged()
+	// the site gives its public port to an inbound that wants it (and takes it back)
+	x.app.fakeFrontSync()
+	defer x.app.fakeFrontSync()
 	cfg, err := x.app.BuildXrayConfig()
 	if err != nil {
 		return err

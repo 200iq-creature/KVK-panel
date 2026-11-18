@@ -34,6 +34,9 @@ func pubFromPriv(priv string) (string, error) {
 }
 
 func portFree(port int, proto string) bool {
+	if proto != "udp" && port == fakePubPort() {
+		return true // the site holds it only until an inbound needs it
+	}
 	if proto == "udp" {
 		c, err := net.ListenPacket("udp", ":"+strconv.Itoa(port))
 		if err != nil {
@@ -139,8 +142,31 @@ func (a *App) apiInbounds(w http.ResponseWriter, r *http.Request) error {
 	now := nowMs()
 	var res []inboundView
 	var ports []int
+	nodeInb := []map[string]any{}
 	embErr := a.embeddedErrors()
 	a.Store.Read(func(d *Data) {
+		// inbounds of linked servers — granted per client like local ones
+		for _, n := range d.Nodes {
+			seen := map[string]bool{}
+			for _, ep := range n.Inbounds {
+				if seen[ep.ID] {
+					continue
+				}
+				seen[ep.ID] = true
+				cnt := 0
+				for _, c := range d.Clients {
+					if c.HasInbound(ep.ID) {
+						cnt++
+					}
+				}
+				remark := ep.Remark
+				if ep.Front {
+					remark = strings.SplitN(remark, " · ", 2)[0]
+				}
+				nodeInb = append(nodeInb, map[string]any{"id": ep.ID, "remark": remark, "protocol": ep.Protocol, "network": ep.Network,
+					"security": ep.Security, "port": ep.Port, "enabled": n.Enabled, "node": n.Name, "nodeId": n.ID, "clients": cnt})
+			}
+		}
 		for _, in := range d.Inbounds {
 			cp := *in
 			v := inboundView{Inbound: &cp, ClientNames: []map[string]any{}, EmbError: embErr[in.ID]}
@@ -164,7 +190,7 @@ func (a *App) apiInbounds(w http.ResponseWriter, r *http.Request) error {
 	if res == nil {
 		res = []inboundView{}
 	}
-	ok(w, map[string]any{"inbounds": res, "xray": a.Xray.Status()})
+	ok(w, map[string]any{"inbounds": res, "nodeInbounds": nodeInb, "xray": a.Xray.Status()})
 	return nil
 }
 

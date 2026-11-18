@@ -15,11 +15,31 @@ BIN="$INSTALL_DIR/kvk-panel"
 XRAY_DIR="$INSTALL_DIR/bin"
 DATA_DIR="/etc/kvk-panel"
 BRANCH_FILE="$DATA_DIR/branch"
-# branch priority: `update BRANCH` argument > KVK_BRANCH > remembered branch > main
+# Branch this copy of the script was published in. When the script is run
+# straight from a branch URL without arguments, that branch is used if its
+# VERSION is newer than the one of the remembered branch (after merging into
+# main the versions are equal, so main wins).
+SCRIPT_BRANCH="arena/3b5bfb45-kvk-panel"
+# branch priority: `update BRANCH` argument > KVK_BRANCH > newer SCRIPT_BRANCH > remembered branch > main
 BRANCH="${KVK_BRANCH:-}"
-[ -n "$BRANCH" ] || BRANCH="$(tr -d ' \n\r' 2>/dev/null <"$BRANCH_FILE" || true)"
 if [ "${1:-}" = "update" ] || [ "${1:-}" = "install" ]; then [ -n "${2:-}" ] && BRANCH="$2"; fi
-BRANCH="${BRANCH:-main}"
+SAVED_BRANCH="$(tr -d ' \n\r' 2>/dev/null <"$BRANCH_FILE" || true)"
+SAVED_BRANCH="${SAVED_BRANCH:-main}"
+
+branch_version() {
+  curl -fsSL --max-time 15 -H 'Cache-Control: no-cache' "https://raw.githubusercontent.com/$REPO/$1/VERSION" 2>/dev/null | tr -d ' \n\r' || true
+}
+# version_gt A B — true when A > B (dotted numbers)
+version_gt() { [ "$1" != "$2" ] && [ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | tail -1)" = "$1" ]; }
+
+if [ -z "$BRANCH" ]; then
+  BRANCH="$SAVED_BRANCH"
+  if [ "$SCRIPT_BRANCH" != "$SAVED_BRANCH" ] && command -v curl >/dev/null 2>&1; then
+    sv="$(branch_version "$SCRIPT_BRANCH")"
+    bv="$(branch_version "$SAVED_BRANCH")"
+    if [ -n "$sv" ] && version_gt "$sv" "${bv:-0}"; then BRANCH="$SCRIPT_BRANCH"; fi
+  fi
+fi
 SERVICE="kvk-panel"
 GO_VERSION="1.25.5"
 
@@ -119,9 +139,7 @@ build_from_source() {
 }
 
 # remote_version — VERSION file of the selected branch
-remote_version() {
-  curl -fsSL --max-time 15 "https://raw.githubusercontent.com/$REPO/$BRANCH/VERSION" 2>/dev/null | tr -d ' \n\r' || true
-}
+remote_version() { branch_version "$BRANCH"; }
 
 fetch_binary() {
   local dest="$1" tag want
@@ -306,7 +324,8 @@ cmd_menu() {
  22. Перевыпустить API-токен
  23. Открыть порт в firewall
  24. Включить BBR
- 25. Удалить панель
+ 25. Ключ связки серверов (API-токен)
+ 26. Удалить панель
   0. Выход
 ===================================================
 EOF
@@ -338,7 +357,8 @@ EOF
     22) offline reset-token ;;
     23) read -rp "Порт: " p; read -rp "Протокол [tcp/udp]: " pr; open_port "$p" "${pr:-tcp}" ;;
     24) enable_bbr ;;
-    25) uninstall ;;
+    25) P apikey ;;
+    26) uninstall ;;
     0) exit 0 ;;
     *) red "Нет такого пункта" ;;
   esac
@@ -361,6 +381,7 @@ case "${1:-}" in
   backup) P backup ;;
   restore) shift; offline restore "$1" ;;
   reset) offline reset-creds ;;
+  apikey | key | api) P apikey ;;
   bbr) enable_bbr ;;
   *) cat <<EOF
 Использование: kvk [команда]
@@ -369,6 +390,7 @@ case "${1:-}" in
   log             журнал панели
   info            адрес и логин
   reset           сбросить логин и пароль
+  apikey          ключ связки серверов и API-токен
   update [ВЕТКА]  обновить панель (ветка запоминается, по умолчанию main)
   version         версия панели
   xray [VER]      установить версию Xray

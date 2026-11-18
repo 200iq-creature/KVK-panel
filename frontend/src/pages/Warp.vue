@@ -2,12 +2,13 @@
   <div class="pg-warp">
     <div class="pagein i-wrap">
       <div class="i-hd">
-        <div><span class="w2-eb">Cloudflare WARP</span><h1>WARP</h1><p>Выход в интернет через Cloudflare: открывает сайты, которые блокируют IP дата-центров (ChatGPT, Netflix, Google без капчи), и подменяет IP сервера на адрес Cloudflare.</p></div>
+        <div><span class="w2-eb">{{ srvName }} · Cloudflare WARP</span><h1>WARP</h1><p>Выход в интернет через Cloudflare: открывает сайты, которые блокируют IP дата-центров (ChatGPT, Netflix, Google без капчи), и подменяет IP сервера на адрес Cloudflare.</p></div>
         <div class="i-hd-a">
           <button v-if="w?.registered" class="btn" type="button" :disabled="busy.refresh" @click="refresh"><span v-if="busy.refresh" class="spin"></span><Icon v-else n="refresh" />Проверить аккаунт</button>
           <button v-if="w?.registered" class="btn btn-p" type="button" :disabled="busy.save || !dirty" @click="save"><span v-if="busy.save" class="spin"></span>Сохранить</button>
         </div>
       </div>
+      <ServerPicker />
       <Loading v-if="!w" :error="error" @retry="load" />
       <template v-else>
         <div class="i-mt">
@@ -53,7 +54,7 @@
 </template>
 <script setup>
 import '../styles/Warp.css'
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, watch } from 'vue'
 import Icon from '../components/Icon.vue'
 import Loading from '../components/Loading.vue'
 import Metric from '../components/Metric.vue'
@@ -61,7 +62,8 @@ import TgRow from '../components/TgRow.vue'
 import Opt from '../components/Opt.vue'
 import Seg from '../components/Seg.vue'
 import Kr from '../components/Kr.vue'
-import { get, post, put, del } from '../lib/api.js'
+import ServerPicker from '../components/ServerPicker.vue'
+import { srv, sget as get, spost as post, sput as put, sdel as del, srvName } from '../lib/server.js'
 import { ok, fail, confirm } from '../lib/ui.js'
 import { bytes } from '../lib/fmt.js'
 
@@ -94,4 +96,5 @@ async function refresh() { busy.refresh = true; await load(true); busy.refresh =
 async function applyLic() { try { await post('warp/license', { license: lic.value.trim() }); ok('Ключ WARP+ применён'); lic.value = ''; load(true) } catch (e) { fail(e) } }
 async function remove() { if (await confirm('Удалить аккаунт WARP?', 'WARP выключится, ключи будут удалены. Список сайтов сохранится.', { danger: true, okText: 'Удалить' })) { try { await del('warp'); ok('Удалено'); load() } catch (e) { fail(e) } } }
 onMounted(() => load())
+watch(() => srv.id, () => { w.value = null; acc.value = null; accErr.value = ''; load() })
 </script>

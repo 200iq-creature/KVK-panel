@@ -3,6 +3,10 @@
     <div class="pagein i-wrap">
       <div class="i-hd">
         <div><span class="w2-eb">KVK Panel {{ s?.version }} · Xray {{ xs?.status?.version || '—' }}</span><h1>Настройки</h1><p>Адрес панели, ядро Xray и его версии, geo-файлы, API и обновление панели. Домены и сертификаты — в разделе <router-link to="/domains">«Домены»</router-link>.</p></div>
+        <div class="i-hd-a">
+          <router-link class="btn" to="/security"><Icon n="sec" />Безопасность</router-link>
+          <router-link class="btn" to="/backups"><Icon n="bak" />Бэкапы</router-link>
+        </div>
       </div>
       <Loading v-if="!s" :error="error" @retry="load" />
       <template v-else>
@@ -22,6 +26,10 @@
               <div class="two">
                 <div class="fld"><label class="lbl">Путь подписки</label><input v-model="pf.subPath" class="inp mono"></div>
                 <div class="fld"><label class="lbl">Отдельный порт подписки</label><input v-model.number="pf.subPort" class="inp" type="number" min="0" max="65535"><p class="hint">0 — тот же порт, что и панель</p></div>
+              </div>
+              <div class="fld"><label class="lbl">Домен подписки</label>
+                <div class="row" style="flex-wrap:nowrap"><select v-model="subDom" class="inp"><option value="">как у панели</option><option v-for="d in s.domainList || []" :key="d.id" :value="d.id">{{ d.name }}{{ d.status === 'active' ? '' : ' · сертификат не готов' }}</option></select><button class="btn" type="button" :disabled="subDom === (s.subCertId || '')" @click="saveSubDom">Применить</button></div>
+                <p class="hint">ссылки подписки: <code>{{ s.subUrl }}</code> · без перезапуска. Домен должен вести на этот сервер; сертификат — в разделе «Домены»</p>
               </div>
               <div class="i-hint wa"><Icon n="warn" /><span>После сохранения панель перезапустится и откроется по новому адресу. Новый порт будет открыт в ufw/firewalld автоматически. Ссылки подписок клиентов изменятся, если поменять путь или порт подписки.</span></div>
               <div class="ft"><span class="grow"></span><button class="btn btn-p" type="button" :disabled="!panelDirty" @click="savePanel">Сохранить и перезапустить</button></div>
@@ -169,6 +177,7 @@ const tab = ref(TABS.some(t => t[0] === route.query.tab) ? route.query.tab : 'pa
 const s = ref(null)
 const error = ref('')
 const pf = reactive({ port: 0, basePath: '', subPath: '', subPort: 0 })
+const subDom = ref('')
 const g = reactive({ nodeName: '', countryCode: '', defaultFp: 'chrome', showTrafficAll: false, autoCleanDays: 0, newResetPeriod: '', newResetDays: 1, autoUpdate: false })
 const xs = ref(null)
 const xst = computed(() => xs.value?.status || {})
@@ -190,6 +199,7 @@ async function load() {
   try {
     const r = await get('settings'); s.value = r
     Object.assign(pf, { port: r.panelPort, basePath: r.basePath, subPath: r.subPath, subPort: r.subPort })
+    subDom.value = r.subCertId || ''
     Object.assign(g, { nodeName: r.nodeName, countryCode: r.countryCode, defaultFp: r.defaultFp || 'chrome', showTrafficAll: r.showTrafficAll, autoCleanDays: r.autoCleanDays, newResetPeriod: r.newResetPeriod || '', newResetDays: r.newResetDays || 1, autoUpdate: r.autoUpdate })
   } catch (e) { error.value = e.message }
 }
@@ -199,6 +209,9 @@ async function savePanel() {
     const r = await post('settings/panel', { port: Number(pf.port), basePath: pf.basePath.trim(), subPath: pf.subPath.trim(), subPort: Number(pf.subPort) || 0 })
     if (r.restart) { ok('Перезапуск… откроем ' + r.url); setTimeout(() => { location.href = r.url }, 3000) } else ok('Без изменений')
   } catch (e) { fail(e) }
+}
+async function saveSubDom() {
+  try { const r = await put('settings/subdomain', { id: subDom.value }); s.value.subCertId = subDom.value; s.value.subUrl = r.subUrl; ok('Ссылки подписки: ' + r.subUrl) } catch (e) { fail(e) }
 }
 async function saveGeneral() {
   try { await put('settings', { ...g, countryCode: g.countryCode.toUpperCase(), autoCleanDays: Number(g.autoCleanDays) || 0, newResetDays: Number(g.newResetDays) || 0 }); ok('Сохранено'); loadMeta() } catch (e) { fail(e) }

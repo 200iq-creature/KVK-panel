@@ -38,7 +38,7 @@
             <div class="i-pb">
               <div class="fld"><label class="lbl">Инбаунды для новых клиентов из бота · {{ s.inbounds.length || 'все включённые' }}</label>
                 <div class="list-rows">
-                  <label v-for="i in inbounds" :key="i.id" class="lr" style="cursor:pointer"><button class="chk" :class="{ on: s.inbounds.includes(i.id) }" type="button" @click.prevent="toggleArr(s.inbounds, i.id)"><Icon n="check" /></button><span class="lr-t"><b>{{ i.remark }}</b><small>{{ PROTO[i.protocol] }} · порт {{ i.port }}</small></span></label>
+                  <label v-for="i in inbounds" :key="i.id" class="lr" style="cursor:pointer"><button class="chk" :class="{ on: s.inbounds.includes(i.id) }" type="button" @click.prevent="toggleArr(s.inbounds, i.id)"><Icon n="check" /></button><span class="lr-t"><b>{{ i.remark }}</b><small>{{ i.node ? "сервер «" + i.node + "» · " : "" }}{{ PROTO[i.protocol] || i.protocol }} · порт {{ i.port }}</small></span></label>
                 </div>
                 <p class="hint">Ничего не отмечено — все включённые инбаунды.</p>
               </div>
@@ -274,7 +274,7 @@ async function sendBc() {
 let timer
 onMounted(async () => {
   load()
-  try { inbounds.value = (await get('inbounds')).inbounds } catch {}
+  try { const r = await get('inbounds'); inbounds.value = [...r.inbounds, ...(r.nodeInbounds || [])] } catch {}
   timer = setInterval(() => { if (tab.value === 'broadcast') loadTab('broadcast'); if (!dirty.value) load() }, 5000)
 })
 onBeforeUnmount(() => clearInterval(timer))
