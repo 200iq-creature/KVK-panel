@@ -68,6 +68,9 @@ func (a *App) apiDomains(w http.ResponseWriter, r *http.Request) error {
 					v.UsedBy = append(v.UsedBy, in.Remark)
 				}
 			}
+			if d.Settings.SubCertID == dm.ID {
+				v.UsedBy = append([]string{"подписка"}, v.UsedBy...)
+			}
 			_, v.Issuing = issuing.Load(dm.ID)
 			list = append(list, v)
 		}
@@ -402,6 +405,9 @@ func (a *App) apiDomainDelete(w http.ResponseWriter, r *http.Request) error {
 		}
 		if d.Settings.PanelCertID == id {
 			return errf(409, "Сертификат используется панелью — сначала выключите HTTPS панели")
+		}
+		if d.Settings.SubCertID == id {
+			d.Settings.SubCertID = "" // subscription links go back to the panel's address
 		}
 		for _, in := range d.Inbounds {
 			if in.CertID == id {

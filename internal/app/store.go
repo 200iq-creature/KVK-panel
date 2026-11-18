@@ -35,6 +35,7 @@ type Settings struct {
 	CountryCode    string `json:"countryCode"`
 	PublicHost     string `json:"publicHost"`
 	PanelCertID    string `json:"panelCertId"`
+	SubCertID      string `json:"subCertId,omitempty"` // own domain for subscription links (empty: the panel's)
 	DefaultFP      string `json:"defaultFp"`
 	AutoUpdate     bool   `json:"autoUpdate"`
 	XrayAPIPort    int    `json:"xrayApiPort"`

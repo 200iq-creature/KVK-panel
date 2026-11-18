@@ -4,12 +4,13 @@ export const NAV = [
     { id: 'inb', label: 'Инбаунды', icon: 'inb', to: '/inbounds', desc: 'подключения этого и связанных серверов: протоколы, порты, транспорт' },
     { id: 'clients', label: 'Клиенты', icon: 'clients', to: '/clients', desc: 'клиенты, теги, доступ к серверам, массовые действия', count: true },
     { id: 'sub', label: 'Подписка', icon: 'sub', to: '/sub', desc: 'название, автовыбор, форматы, страница в браузере' },
+    { id: 'auto', label: 'Автонастройка', icon: 'auto', to: '/autosetup', desc: 'по шагам: домены, сайты серверов, все протоколы, клиент main' },
   ] },
   { label: 'Сервер', items: [
     { id: 'link', label: 'Связка серверов', icon: 'link', to: '/link', desc: 'серверы, сохранённые конфигурации, восстановление' },
     { id: 'dom', label: 'Домены', icon: 'dom', to: '/domains', desc: 'домены и SSL-сертификаты всех серверов' },
     { id: 'flt', label: 'Фильтрация', icon: 'flt', to: '/filter', desc: 'реклама, опасные сайты, 18+' },
-    { id: 'site', label: 'Сайт', icon: 'globe', to: '/site', desc: 'сайт-прикрытие: домены, страница, Reality и CDN-вход' },
+    { id: 'site', label: 'Сайт', icon: 'globe', to: '/site', desc: 'сайт-прикрытие: домены, страница, сертификаты' },
     { id: 'warp', label: 'WARP', icon: 'warp', to: '/warp', desc: 'Cloudflare WARP как выход сервера' },
   ] },
   { label: 'Дополнительно', items: [

@@ -39,6 +39,16 @@ func (a *App) apiSettings(w http.ResponseWriter, r *http.Request) error {
 		res["latestVersion"] = s.LatestVersion
 		res["lastUpdateCheck"] = s.LastUpdateCheck
 		res["https"] = s.PanelCertID != ""
+		res["subCertId"] = s.SubCertID
+		res["subDomain"] = subHostLocked(d)
+		res["subUrl"] = a.subBaseURLLocked(d)
+		doms := []map[string]any{}
+		for _, dm := range d.Domains {
+			if dm.Kind == "domain" {
+				doms = append(doms, map[string]any{"id": dm.ID, "name": dm.Name, "status": dm.Status, "mode": dm.Mode})
+			}
+		}
+		res["domainList"] = doms
 	})
 	res["version"] = Version
 	res["branch"] = Branch
@@ -456,5 +466,35 @@ func (a *App) apiSubSettingsUpdate(w http.ResponseWriter, r *http.Request) error
 		return nil
 	})
 	ok(w, map[string]any{"ok": true})
+	return nil
+}
+
+// apiSettingsSubDomain sets the subscription's own domain ("" — the panel's address).
+func (a *App) apiSettingsSubDomain(w http.ResponseWriter, r *http.Request) error {
+	var req struct {
+		ID string `json:"id"`
+	}
+	if err := readJSON(r, &req); err != nil {
+		return err
+	}
+	var u string
+	err := a.Store.Update(func(d *Data) error {
+		if req.ID != "" {
+			dm := d.DomainByID(req.ID)
+			if dm == nil || dm.Kind != "domain" {
+				return errf(404, "Домен не найден")
+			}
+			d.AddEvent("ok", "Подписка переведена на "+dm.Name, "")
+		} else if d.Settings.SubCertID != "" {
+			d.AddEvent("ok", "Подписка снова на адресе панели", "")
+		}
+		d.Settings.SubCertID = req.ID
+		u = a.subBaseURLLocked(d)
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	ok(w, map[string]any{"ok": true, "subUrl": u})
 	return nil
 }

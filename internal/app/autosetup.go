@@ -87,6 +87,11 @@ type autoReq struct {
 	Email        string          `json:"email"`
 	CFToken      string          `json:"cfToken"`
 	CFManage     bool            `json:"cfManage"`
+	// SiteOnly: only the decoy site (domains, certificates, its own port) —
+	// no VLESS. An existing Reality inbound is kept and re-pointed at the site.
+	SiteOnly bool `json:"siteOnly"`
+	// Label: server name for inbound remarks («Германия VLESS Reality») — set by «Автонастройка»
+	Label string `json:"label"`
 }
 
 type dnsInfo struct {
@@ -319,6 +324,32 @@ func (a *App) apiAutoCheck(w http.ResponseWriter, r *http.Request) error {
 
 // autoRemark avoids duplicate names in subscriptions when the user already has
 // a hand-made inbound called the same.
+// labelRemark: «base», or «base 2»… if another inbound already has that name.
+func labelRemark(d *Data, self *Inbound, base string) string {
+	name := base
+	for i := 2; ; i++ {
+		taken := false
+		for _, in := range d.Inbounds {
+			if in != self && in.Remark == name {
+				taken = true
+				break
+			}
+		}
+		if !taken {
+			return name
+		}
+		name = fmt.Sprintf("%s %d", base, i)
+	}
+}
+
+// autoLabelOf: «Германия» from «Германия VLESS Reality» (empty for old-style remarks).
+func autoLabelOf(remark, suffix string) string {
+	if i := strings.Index(remark, " "+suffix); i > 0 {
+		return remark[:i]
+	}
+	return ""
+}
+
 func autoRemark(d *Data, base string) string {
 	name := base
 	for i := 2; ; i++ {
@@ -367,7 +398,7 @@ func (a *App) apiAutoRun(w http.ResponseWriter, r *http.Request) error {
 		doms = append(doms, d)
 	}
 	if len(doms) == 0 {
-		return errf(400, "Укажите хотя бы один домен — на нём будет фейк-сайт")
+		return errf(400, "Укажите хотя бы один домен — на нём будет сайт")
 	}
 	if len(doms) > 10 {
 		return errf(400, "Не больше 10 доменов")
@@ -410,8 +441,20 @@ func (a *App) apiAutoRun(w http.ResponseWriter, r *http.Request) error {
 	if req.CFManage {
 		add("cf", "Cloudflare: DNS-записи и режим SSL")
 	}
-	add("site", "Фейк-сайт")
-	add("inbounds", "Инбаунды VLESS и запуск Xray")
+	hasReality := false
+	a.Store.Read(func(d *Data) {
+		for _, in := range d.Inbounds {
+			if in.Auto == "reality" {
+				hasReality = true
+			}
+		}
+	})
+	add("site", "Сайт")
+	if !req.SiteOnly {
+		add("inbounds", "Инбаунды VLESS и запуск Xray")
+	} else if hasReality {
+		add("inbounds", "Reality: новые домены сайта")
+	}
 	add("certs", "Сертификаты Let's Encrypt")
 	if req.CFManage {
 		add("cfssl", "Cloudflare: режим Full (strict)")
@@ -430,7 +473,7 @@ func (a *App) runAutoSetup(req autoReq) {
 		autoState.Running, autoState.Error, autoState.Finished = false, err.Error(), nowMs()
 		autoState.mu.Unlock()
 		a.Store.Update(func(d *Data) error {
-			d.AddEvent("bad", "Автонастройка VLESS не завершена: "+err.Error(), "")
+			d.AddEvent("bad", "Настройка сайта не завершена: "+err.Error(), "")
 			return nil
 		})
 	}
@@ -449,8 +492,25 @@ func (a *App) runAutoSetup(req autoReq) {
 	}
 	// SNI goes first in Reality serverNames
 	sort.SliceStable(names, func(i, j int) bool { return names[i] == req.SNI && names[j] != req.SNI })
-	if len(cdnHosts) == 0 && !isFreeDomain(req.SNI) {
+	if len(cdnHosts) == 0 && (!isFreeDomain(req.SNI) || req.Label != "") {
+		// without Cloudflare the same paths still work as XHTTP / WebSocket over TLS straight to the site
 		cdnHosts = []string{req.SNI}
+	}
+	realityOn := false
+	if req.SiteOnly {
+		// keep what «Автонастройка» made: refresh Reality (and its fronts) for the new domains
+		a.Store.Read(func(d *Data) {
+			for _, in := range d.Inbounds {
+				switch in.Auto {
+				case "reality":
+					realityOn = true
+					req.Label = autoLabelOf(in.Remark, "VLESS Reality")
+				case "cdn":
+					req.CDN = true
+				}
+			}
+		})
+		req.GrantAll, req.CreateClient = false, false
 	}
 	ip := a.autoServerIP()
 
@@ -563,22 +623,28 @@ func (a *App) runAutoSetup(req autoReq) {
 	autoState.set("site", "ok", siteNote)
 
 	// 4. inbounds
-	autoState.set("inbounds", "run", "")
-	realityID, cdnID, clientName, err := a.autoInbounds(req, names, cdnHosts, fs)
-	if err != nil {
-		fail("inbounds", err)
-		return
-	}
+	var realityID, cdnID, clientName string
 	go OpenFirewallPort(req.Port, "tcp")
 	go OpenFirewallPort(80, "tcp")
-	note := "VLESS Reality (Vision) на порту " + strconv.Itoa(req.Port) + ", SNI " + req.SNI
-	if cdnID != "" {
-		note += "; VLESS XHTTP через CDN: " + strings.Join(cdnHosts, ", ")
+	if !req.SiteOnly || realityOn {
+		autoState.set("inbounds", "run", "")
+		var err error
+		realityID, cdnID, clientName, err = a.autoInbounds(req, names, cdnHosts, fs)
+		if err != nil {
+			fail("inbounds", err)
+			return
+		}
+		note := "VLESS Reality (Vision) на порту " + strconv.Itoa(req.Port) + ", SNI " + req.SNI
+		if cdnID != "" {
+			note += "; VLESS XHTTP и WebSocket за сайтом: " + strings.Join(cdnHosts, ", ")
+		}
+		if clientName != "" {
+			note += "; создан клиент " + clientName
+		}
+		autoState.set("inbounds", "ok", note)
+	} else {
+		a.fakeFrontSync()
 	}
-	if clientName != "" {
-		note += "; создан клиент " + clientName
-	}
-	autoState.set("inbounds", "ok", note)
 
 	// 5. certificates
 	autoState.set("certs", "run", "")
@@ -620,7 +686,11 @@ func (a *App) runAutoSetup(req autoReq) {
 	}
 
 	a.Store.Update(func(d *Data) error {
-		d.AddEvent("ok", "Автонастройка VLESS: Reality на "+strconv.Itoa(req.Port)+", фейк-сайт "+strings.Join(names, ", "), "")
+		if req.SiteOnly && !realityOn {
+			d.AddEvent("ok", "Сайт на "+strings.Join(names, ", ")+" (порт "+strconv.Itoa(req.Port)+")", "")
+		} else {
+			d.AddEvent("ok", "Сайт и VLESS Reality на "+strconv.Itoa(req.Port)+": "+strings.Join(names, ", "), "")
+		}
 		return nil
 	})
 	go a.SyncNodes()
@@ -678,6 +748,9 @@ func (a *App) autoInbounds(req autoReq, names, cdnHosts []string, fs FakeSiteSet
 		if isNew {
 			reality = &Inbound{ID: RandomHex(6), CreatedAt: nowMs(), Sniffing: true, Auto: "reality", Remark: autoRemark(d, "Reality")}
 		}
+		if req.Label != "" {
+			reality.Remark = labelRemark(d, reality, req.Label+" VLESS Reality")
+		}
 		reality.Enabled = true
 		reality.Protocol, reality.Network, reality.Security = "vless", "tcp", "reality"
 		reality.Port, reality.Listen = req.Port, ""
@@ -711,6 +784,16 @@ func (a *App) autoInbounds(req autoReq, names, cdnHosts []string, fs FakeSiteSet
 				return err
 			}
 			wsID = w.ID
+			if req.Label != "" {
+				kind := "TLS"
+				for _, h := range cdnHosts {
+					if h != req.SNI {
+						kind = "CDN"
+					}
+				}
+				x.Remark = labelRemark(d, x, req.Label+" VLESS XHTTP "+kind)
+				w.Remark = labelRemark(d, w, req.Label+" VLESS WS "+kind)
+			}
 		} else {
 			for _, old := range []*Inbound{cdn, cdnws} {
 				if old != nil {
@@ -951,7 +1034,15 @@ func (a *App) autoSelfCheck() ([]string, bool) {
 	})
 	out := []string{}
 	bad := false
-	if !a.Xray.Status().Running {
+	hasReality := false
+	a.Store.Read(func(d *Data) {
+		for _, in := range d.Inbounds {
+			if in.Auto == "reality" && in.Enabled {
+				hasReality = true
+			}
+		}
+	})
+	if hasReality && !a.Xray.Status().Running {
 		out = append(out, "Xray не запущен")
 		return out, true
 	}

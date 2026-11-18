@@ -49,7 +49,22 @@ func (a *App) subBaseURLLocked(d *Data) string {
 	if d.Settings.SubPort > 0 {
 		port = d.Settings.SubPort
 	}
-	return scheme + "://" + hostPort(a.panelHostLocked(d), port, scheme) + "/" + d.Settings.SubPath + "/"
+	host := a.panelHostLocked(d)
+	if sh := subHostLocked(d); sh != "" {
+		host = sh
+	}
+	return scheme + "://" + hostPort(host, port, scheme) + "/" + d.Settings.SubPath + "/"
+}
+
+// subHostLocked: the subscription's own domain, if one is set and its certificate is ready.
+func subHostLocked(d *Data) string {
+	if d.Settings.SubCertID == "" {
+		return ""
+	}
+	if dm := d.DomainByID(d.Settings.SubCertID); dm != nil && dm.Status == "active" && dm.CertFile != "" {
+		return dm.Name
+	}
+	return ""
 }
 
 func (a *App) subBaseURL() string {

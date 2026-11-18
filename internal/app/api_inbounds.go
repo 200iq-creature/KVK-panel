@@ -34,6 +34,9 @@ func pubFromPriv(priv string) (string, error) {
 }
 
 func portFree(port int, proto string) bool {
+	if proto != "udp" && port == fakePubPort() {
+		return true // the site holds it only until an inbound needs it
+	}
 	if proto == "udp" {
 		c, err := net.ListenPacket("udp", ":"+strconv.Itoa(port))
 		if err != nil {

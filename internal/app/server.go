@@ -81,6 +81,35 @@ func (a *App) panelTLS() (*certReloader, bool) {
 	return &certReloader{certFile: cf, keyFile: kf}, true
 }
 
+// panelCertFor picks the certificate by SNI: the subscription domain gets its
+// own certificate, everything else — the panel's.
+func (a *App) panelCertFor(panel *certReloader) func(*tls.ClientHelloInfo) (*tls.Certificate, error) {
+	var mu sync.Mutex
+	subs := map[string]*certReloader{}
+	return func(h *tls.ClientHelloInfo) (*tls.Certificate, error) {
+		name := strings.ToLower(strings.TrimSuffix(h.ServerName, "."))
+		var cf, kf string
+		a.Store.Read(func(d *Data) {
+			if name != "" && name == subHostLocked(d) {
+				cf, kf = a.certPaths(d.Settings.SubCertID, d)
+			}
+		})
+		if cf != "" && fileExists(cf) && fileExists(kf) {
+			mu.Lock()
+			r := subs[cf]
+			if r == nil {
+				r = &certReloader{certFile: cf, keyFile: kf}
+				subs[cf] = r
+			}
+			mu.Unlock()
+			if c, err := r.get(h); err == nil {
+				return c, nil
+			}
+		}
+		return panel.get(h)
+	}
+}
+
 func (a *App) PanelScheme() string {
 	if _, okk := a.panelTLS(); okk {
 		return "https"
@@ -102,7 +131,7 @@ func (a *App) startServers() (*servers, error) {
 		}
 		srv := &http.Server{Handler: h, ReadHeaderTimeout: 15 * time.Second, IdleTimeout: 120 * time.Second}
 		if useTLS {
-			srv.TLSConfig = &tls.Config{GetCertificate: reloader.get, MinVersion: tls.VersionTLS12}
+			srv.TLSConfig = &tls.Config{GetCertificate: a.panelCertFor(reloader), MinVersion: tls.VersionTLS12}
 			ln = tls.NewListener(ln, srv.TLSConfig)
 		}
 		res.list = append(res.list, srv)

@@ -22,7 +22,7 @@ func (a *App) wrap(h handlerFn) http.HandlerFunc {
 // authed: session cookie (with CSRF header for mutations) or API token.
 func (a *App) authed(h handlerFn) http.HandlerFunc {
 	return a.wrap(func(w http.ResponseWriter, r *http.Request) error {
-		if a.checkToken(r) {
+		if a.checkToken(r) || isLocalCall(r) {
 			return h(w, r)
 		}
 		if !a.checkSession(r) {
@@ -92,6 +92,11 @@ func (a *App) apiMux() *http.ServeMux {
 	A("GET /api/autosetup/preview", a.apiAutoPreview)
 	A("DELETE /api/autosetup/token", a.apiAutoToken)
 	A("DELETE /api/autosetup", a.apiAutoDelete)
+	A("GET /api/wizard", a.apiWizGet)
+	A("PUT /api/settings/subdomain", a.apiSettingsSubDomain)
+	A("POST /api/wizard/run", a.apiWizRun)
+	A("GET /api/wizard/state", a.apiWizState)
+	A("POST /api/wizard/switch", a.apiWizSwitch)
 
 	// xray core
 	A("GET /api/xray/status", a.apiXrayStatus)

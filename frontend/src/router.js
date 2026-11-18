@@ -9,6 +9,7 @@ const routes = [
   { path: '/site', name: 'site', component: () => import('./pages/VlessAuto.vue'), meta: { title: 'Сайт', nav: 'site' } },
   { path: '/vless', redirect: '/site' },
   { path: '/sub', name: 'sub', component: () => import('./pages/Sub.vue'), meta: { title: 'Подписка', nav: 'sub' } },
+  { path: '/autosetup', name: 'autosetup', component: () => import('./pages/AutoSetup.vue'), meta: { title: 'Автонастройка', nav: 'auto' } },
   { path: '/shop', name: 'shop', component: () => import('./pages/Shop.vue'), meta: { title: 'Бот-магазин', nav: 'shop' } },
   { path: '/tgproxy', name: 'tgproxy', component: () => import('./pages/TgProxy.vue'), meta: { title: 'Telegram-прокси', nav: 'tgp' } },
   { path: '/link', name: 'link', component: () => import('./pages/Link.vue'), meta: { title: 'Связка серверов', nav: 'link' } },
