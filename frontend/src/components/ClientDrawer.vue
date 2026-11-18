@@ -62,7 +62,7 @@
     </template>
     <template #foot>
       <template v-if="mode === 'edit'">
-        <button class="btn" type="button" @click="mode = 'view'">Отмена</button>
+        <button class="btn" type="button" @click="startMode === 'edit' ? $emit('close') : (mode = 'view')">Отмена</button>
         <button class="btn btn-p" type="button" :disabled="busy.save" @click="save"><span v-if="busy.save" class="spin"></span>Сохранить</button>
       </template>
       <template v-else-if="c">
@@ -86,7 +86,7 @@ import { copy, ok, fail, confirm, prompt } from '../lib/ui.js'
 import { bytes, left, dt, ago, PROTO, NET, SEC } from '../lib/fmt.js'
 import { STATUS, RESET } from '../lib/client.js'
 
-const p = defineProps({ id: String, inbounds: Array, allTags: Array })
+const p = defineProps({ id: String, inbounds: Array, allTags: Array, startMode: { type: String, default: 'view' } })
 const emit = defineEmits(['close', 'changed'])
 const c = ref(null)
 const links = ref([])
@@ -117,7 +117,7 @@ async function load() {
   error.value = ''
   try { const r = await get('clients/' + p.id); c.value = r.client; links.value = r.links || [] } catch (e) { error.value = e.message }
 }
-watch(() => p.id, (v) => { c.value = null; mode.value = 'view'; qr.value = ''; if (v) load() }, { immediate: true })
+watch(() => p.id, (v) => { c.value = null; mode.value = p.startMode === 'edit' ? 'edit' : 'view'; qr.value = ''; if (v) load() }, { immediate: true })
 
 async function action(a, msg, extra = {}) {
   try { await post(`clients/${c.value.id}/action`, { action: a, ...extra }); ok(msg); await load(); emit('changed') } catch (e) { fail(e) }
@@ -134,7 +134,7 @@ async function regen(a, title, text) {
 }
 async function save() {
   busy.save = true
-  try { await put('clients/' + c.value.id, form.value.body()); ok('Сохранено'); mode.value = 'view'; await load(); emit('changed') } catch (e) { fail(e) } finally { busy.save = false }
+  try { await put('clients/' + c.value.id, form.value.body()); ok('Сохранено'); emit('changed'); if (p.startMode === 'edit') { emit('close'); return } mode.value = 'view'; await load() } catch (e) { fail(e) } finally { busy.save = false }
 }
 async function remove() {
   if (!await confirm(`Удалить ${c.value.name}?`, 'Клиент пропадёт со всех инбаундов и серверов связки, ссылки перестанут работать. Отменить нельзя.', { danger: true, okText: 'Удалить' })) return

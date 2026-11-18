@@ -616,11 +616,16 @@ func (a *App) apiNodeTest(w http.ResponseWriter, r *http.Request) error {
 
 func (a *App) apiNodeAdd(w http.ResponseWriter, r *http.Request) error {
 	var req struct {
-		URL   string `json:"url"`
-		Token string `json:"token"`
-		Name  string `json:"name"`
+		URL     string `json:"url"`
+		Token   string `json:"token"`
+		Name    string `json:"name"`
+		Country string `json:"country"` // empty — as set on the server
 	}
 	if err := readJSON(r, &req); err != nil {
+		return err
+	}
+	cc, err := normCountry(req.Country)
+	if err != nil {
 		return err
 	}
 	u, tok, err := parseNodeKey(req.URL, req.Token)
@@ -655,7 +660,13 @@ func (a *App) apiNodeAdd(w http.ResponseWriter, r *http.Request) error {
 	a.syncNodesNow()
 	syncMu.Unlock()
 	_ = a.fetchNodeProfile(n.ID)
-	ok(w, map[string]any{"id": n.ID})
+	res := map[string]any{"id": n.ID}
+	if cc != "" && cc != ni.Country {
+		if wn := a.setNodeCountry(n.ID, u, tok, cc); wn != "" {
+			res["warning"] = wn
+		}
+	}
+	ok(w, res)
 	return nil
 }
 
@@ -672,9 +683,17 @@ func (a *App) apiNodeUpdate(w http.ResponseWriter, r *http.Request) error {
 		Enabled *bool   `json:"enabled"`
 		Token   *string `json:"token"`
 		URL     *string `json:"url"`
+		Country *string `json:"country"`
 	}
 	if err := readJSON(r, &req); err != nil {
 		return err
+	}
+	cc := ""
+	if req.Country != nil {
+		var err error
+		if cc, err = normCountry(*req.Country); err != nil {
+			return err
+		}
 	}
 	id := r.PathValue("id")
 	var curURL, curTok, selfTok string
@@ -747,9 +766,42 @@ func (a *App) apiNodeUpdate(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
+	res := map[string]any{"ok": true, "replaced": replaced}
+	if req.Country != nil {
+		if wn := a.setNodeCountry(id, newURL, newTok, cc); wn != "" {
+			res["warning"] = wn
+		}
+	}
 	go a.SyncNodes()
-	ok(w, map[string]any{"ok": true, "replaced": replaced})
+	ok(w, res)
 	return nil
+}
+
+// normCountry: "de" → "DE"; empty is allowed (no flag).
+func normCountry(s string) (string, error) {
+	s = strings.ToUpper(strings.TrimSpace(s))
+	if s == "" {
+		return "", nil
+	}
+	if len(s) != 2 || s[0] < 'A' || s[0] > 'Z' || s[1] < 'A' || s[1] > 'Z' {
+		return "", errf(400, "Код страны — две латинские буквы, например DE, NL, FI")
+	}
+	return s, nil
+}
+
+// setNodeCountry saves the country code on the linked server itself (it is the
+// source of truth: sync takes it from there) and in the local copy.
+func (a *App) setNodeCountry(id, url, token, cc string) string {
+	a.Store.Update(func(d *Data) error {
+		if n := d.NodeByID(id); n != nil {
+			n.Country = cc
+		}
+		return nil
+	})
+	if err := nodeCall("PUT", url, token, "api/settings", map[string]any{"countryCode": cc}, nil); err != nil {
+		return "Страна сохранена здесь, но сервер не принял её (" + err.Error() + ") — после синхронизации может вернуться прежняя"
+	}
+	return ""
 }
 
 func (a *App) apiNodeDelete(w http.ResponseWriter, r *http.Request) error {
