@@ -31,6 +31,8 @@ type domainView struct {
 	SNI  bool `json:"sni"`
 	// PanelOf: name of the server whose panel is opened on this domain
 	PanelOf string `json:"panelOf,omitempty"`
+	// Dyn: a freemyip / myaddr name the panel keeps pointed at the server
+	Dyn bool `json:"dyn"`
 }
 
 func (a *App) apiDomains(w http.ResponseWriter, r *http.Request) error {
@@ -49,7 +51,8 @@ func (a *App) apiDomains(w http.ResponseWriter, r *http.Request) error {
 		fs := d.Settings.Fake
 		for _, dm := range d.Domains {
 			cp := *dm
-			v := domainView{Domain: &cp, UsedBy: []string{}, Panel: dm.ID == panelCert}
+			cp.DynToken = ""
+			v := domainView{Domain: &cp, UsedBy: []string{}, Panel: dm.ID == panelCert, Dyn: dm.DynToken != ""}
 			v.Site = fs.Enabled && containsStr(fs.Domains, dm.Name)
 			v.SNI = v.Site && fs.SNI == dm.Name
 			if v.Panel || (dm.Kind == "domain" && strings.EqualFold(panelHost, dm.Name)) {
@@ -443,6 +446,7 @@ func (a *App) apiHostUpdate(w http.ResponseWriter, r *http.Request) error {
 
 // renewCerts renews Let's Encrypt certificates when 1/3 of lifetime remains.
 func (a *App) renewCerts() {
+	a.dynKeepAlive()
 	type job struct {
 		id string
 	}

@@ -253,7 +253,7 @@ func (a *App) applyProfile(p *serverProfile, dns bool, from string) ([]string, e
 	if dns && p.Fake.CFToken != "" && ip != "" && net.ParseIP(ip).To4() != nil {
 		zones := map[string]string{}
 		for _, j := range jobs {
-			if j.kind != "domain" {
+			if j.kind != "domain" || isFreeDomain(j.name) {
 				continue
 			}
 			zid, ok := "", false
@@ -278,12 +278,30 @@ func (a *App) applyProfile(p *serverProfile, dns bool, from string) ([]string, e
 	} else if dns {
 		names := []string{}
 		for _, j := range jobs {
-			if j.kind == "domain" {
+			if j.kind == "domain" && !isFreeDomain(j.name) {
 				names = append(names, j.name)
 			}
 		}
 		if len(names) > 0 && ip != "" {
 			warns = append(warns, "Перенаправьте A-записи на "+ip+": "+strings.Join(names, ", ")+" — токена Cloudflare в конфигурации нет")
+		}
+	}
+	// free domains: freemyip / myaddr names follow the server when asked to;
+	// sslip.io / nip.io names contain the old IP and can't
+	for _, pd := range p.Domains {
+		switch {
+		case pd.DynToken != "" && dns && ip != "":
+			if err := dynUpdate(pd.Provider, pd.Name, pd.DynToken, ip); err != nil {
+				warns = append(warns, "DNS "+pd.Name+": "+err.Error())
+			} else {
+				a.setDynState(pd.ID, ip, "")
+			}
+		case pd.DynToken != "" && pd.DynIP != ip:
+			warns = append(warns, pd.Name+" указывает на старый сервер — нажмите «Направить сюда» в «Доменах» или восстановите с галочкой DNS")
+		case (pd.Provider == "sslip" || pd.Provider == "nip") && ip != "":
+			if d4, h4 := ipv4Forms(ip); !strings.Contains(pd.Name, d4) && !strings.Contains(pd.Name, h4) {
+				warns = append(warns, pd.Name+" привязан к IP старого сервера — создайте новый бесплатный домен в «Доменах»")
+			}
 		}
 	}
 	// certificates: saved ones first, the rest is issued again

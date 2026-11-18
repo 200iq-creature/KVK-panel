@@ -110,7 +110,8 @@
                       <span v-if="dnsOf(dm.name)" class="au-dns" :class="DNS[dnsOf(dm.name).status]?.[1]" :title="(dnsOf(dm.name).ips || []).join(', ')">{{ DNS[dnsOf(dm.name).status]?.[0] }}</span>
                       <button class="btn btn-sm btn-g btn-ic" type="button" aria-label="Убрать" @click="f.domains.splice(i, 1); fixSni()"><Icon n="x" /></button>
                     </div>
-                    <div class="au-dp">
+                    <div v-if="isFree(dm.name)" class="au-dp"><span><b>Бесплатный домен</b><small>его DNS ведёт сервис — Cloudflare-прокси недоступен, работает Reality</small></span></div>
+                    <div v-else class="au-dp">
                       <Tg v-model="dm.proxy" />
                       <span><b>Cloudflare-прокси</b> <em class="au-or" :class="{ on: dm.proxy }"></em><small>{{ dm.proxy ? 'оранжевое облако: сайт за Cloudflare, домен даёт CDN-вход' : 'серое облако / не Cloudflare: только Reality' }}</small></span>
                     </div>
@@ -118,6 +119,7 @@
                   </div>
                 </div>
                 <Empty v-else icon="globe" title="Добавьте хотя бы один домен" text="Можно вставить сразу несколько — через пробел, запятую или с новой строки." />
+                <div v-if="!pickable.length && !f.domains.length" class="i-hint"><Icon n="star" /><span><b>Нет своего домена?</b> В разделе <router-link to="/domains">«Домены»</router-link> нажмите «Бесплатный домен» — имя появится за секунды, без покупки и регистрации, и сразу окажется в списке выше.</span></div>
                 <div class="i-hint"><Icon n="info" /><span><b>Совет:</b> включите <b>Cloudflare-прокси (оранжевое облако)</b> на доменах сайта. Посетители и сканеры увидят сайт за Cloudflare и не узнают IP сервера, а подписка получит запасной вход через CDN — он работает, даже если IP сервера заблокируют. Reality при этом подключается к серверу напрямую. С 2–3 доменами надёжнее: если один попадёт под блокировку, остальные продолжат работать.</span></div>
               </div>
             </section>
@@ -255,6 +257,8 @@ const kind = (l) => l.security === 'reality'
 const host = (l) => l.link.match(/@([^:/?#]+)/)?.[1] || ''
 const dnsOf = (n) => (chk.value?.domains || []).find(x => x.name === n)
 
+// names under these services can't be put behind Cloudflare
+const isFree = (n) => /\.(sslip\.io|nip\.io|freemyip\.com|myaddr\.(tools|dev|io))$/.test(n)
 const norm = (s) => s.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/[/:].*$/, '').replace(/\.$/, '')
 function addDomain() {
   for (const raw of newDom.value.split(/[\s,;]+/)) {
@@ -263,7 +267,7 @@ function addDomain() {
     if (!/^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z][a-z0-9-]{1,62}$/.test(n)) { fail('Некорректный домен: ' + n); continue }
     if (f.domains.some(x => x.name === n)) continue
     if (f.domains.length >= 10) { fail('Не больше 10 доменов'); break }
-    f.domains.push({ name: n, proxy: true })
+    f.domains.push({ name: n, proxy: !isFree(n) })
   }
   newDom.value = ''
   fixSni()

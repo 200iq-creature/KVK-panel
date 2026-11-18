@@ -130,6 +130,10 @@ func (a *App) apiMux() *http.ServeMux {
 	// domains & certificates
 	A("GET /api/domains", a.apiDomains)
 	A("POST /api/domains", a.apiDomainCreate)
+	A("GET /api/domains/free", a.apiFreeDomainInfo)
+	A("POST /api/domains/free", a.apiFreeDomainCreate)
+	A("GET /api/domains/free/check", a.apiFreeDomainCheck)
+	A("POST /api/domains/{id}/point", a.apiFreeDomainPoint)
 	A("POST /api/domains/{id}/issue", a.apiDomainIssue)
 	A("POST /api/domains/{id}/panel", a.apiDomainPanel)
 	A("DELETE /api/domains/{id}", a.apiDomainDelete)

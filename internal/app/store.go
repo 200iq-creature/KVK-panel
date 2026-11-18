@@ -372,6 +372,13 @@ type Domain struct {
 	Email     string `json:"email"`
 	CreatedAt int64  `json:"createdAt"`
 	LastTry   int64  `json:"lastTry"`
+	// free domains (freedomain.go): provider id; freemyip/myaddr token and the
+	// address the name was last pointed at
+	Provider string `json:"provider,omitempty"`
+	DynToken string `json:"dynToken,omitempty"`
+	DynIP    string `json:"dynIp,omitempty"`
+	DynAt    int64  `json:"dynAt,omitempty"`
+	DynError string `json:"dynError,omitempty"`
 }
 
 type Tariff struct {

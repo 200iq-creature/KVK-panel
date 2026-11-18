@@ -14,7 +14,7 @@ import (
 
 // Version is set at build time from the VERSION file (-ldflags -X); keep the
 // default in sync with VERSION for plain `go build`.
-var Version = "1.0.5"
+var Version = "1.0.6"
 
 // Branch is the git branch the binary was built from (-ldflags -X).
 var Branch = "main"

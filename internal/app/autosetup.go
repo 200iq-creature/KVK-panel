@@ -361,6 +361,9 @@ func (a *App) apiAutoRun(w http.ResponseWriter, r *http.Request) error {
 			return errf(400, "Некорректный домен: %s", d.Name)
 		}
 		seen[d.Name] = true
+		if isFreeDomain(d.Name) {
+			d.Proxy = false // sslip.io / freemyip … names can't be put behind Cloudflare
+		}
 		doms = append(doms, d)
 	}
 	if len(doms) == 0 {
@@ -446,7 +449,7 @@ func (a *App) runAutoSetup(req autoReq) {
 	}
 	// SNI goes first in Reality serverNames
 	sort.SliceStable(names, func(i, j int) bool { return names[i] == req.SNI && names[j] != req.SNI })
-	if len(cdnHosts) == 0 {
+	if len(cdnHosts) == 0 && !isFreeDomain(req.SNI) {
 		cdnHosts = []string{req.SNI}
 	}
 	ip := a.autoServerIP()
@@ -491,6 +494,10 @@ func (a *App) runAutoSetup(req autoReq) {
 		}
 		res := []string{}
 		for _, d := range req.Domains {
+			if isFreeDomain(d.Name) {
+				res = append(res, d.Name+": бесплатный домен, DNS ведёт его сервис")
+				continue
+			}
 			zid, zone, err := cfFindZone(req.CFToken, d.Name)
 			if err != nil {
 				fail("cf", err)
