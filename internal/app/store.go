@@ -323,6 +323,8 @@ type Node struct {
 	// Granted is set once the node's inbounds were handed out to the clients
 	// (on the first sync); after that access is chosen per client.
 	Granted bool `json:"granted,omitempty"`
+	// Xray is the core version reported by the node
+	Xray string `json:"xray,omitempty"`
 }
 
 // InboundIDs returns the unique (main-side) inbound ids of the node.

@@ -45,6 +45,22 @@ bash <(curl -fsSL https://raw.githubusercontent.com/200iq-creature/KVK-panel/mai
 
 Трафик TUIC и AmneziaWG панель передаёт в Xray через локальный мост. Поэтому статистика, лимиты трафика и устройств, сроки, WARP и фильтрация работают для них так же, как для VLESS. TCP- и UDP-инбаунды могут занимать один номер порта, например Reality на TCP 443 и TUIC на UDP 443.
 
+## Форматы подписки
+
+Одна ссылка подписки отдаёт нужный формат сам — по User-Agent приложения. Формат можно задать и явно, параметром `?format=`:
+
+| `format` | Для чего | Что внутри |
+|---|---|---|
+| — (base64) | Happ, v2rayNG, v2RayTun, Streisand, Hiddify | ссылки `vless://`, `vmess://`, `trojan://`, `ss://`, `hy2://`, `tuic://` |
+| `singbox` | sing-box (SFA/SFI/SFM/SFW), Karing, Throne, Hiddify, NekoBox | готовый конфиг sing-box 1.12+: TUN и mixed-прокси `127.0.0.1:2080`, DNS через прокси, «Автовыбор», прямой доступ к локальным сетям и (если включено) к RU-сайтам |
+| `clash` | Clash Meta / Mihomo, FlClash, Clash Verge | YAML с TUIC и AmneziaWG |
+| `json` | Happ, v2RayTun, v2rayN (Xray-конфиги) | полные конфиги Xray, включая MASQUE |
+| `links` | просмотр | ссылки открытым текстом |
+
+Официальные приложения sing-box получают формат `singbox` автоматически. В других (например, в Throne или NekoBox на ПК) добавьте к ссылке `?format=singbox` и импортируйте её как удалённый профиль sing-box.
+
+В конфиг sing-box не попадают XHTTP, MASQUE и AmneziaWG: sing-box их не поддерживает. Не попадает и VLESS Reality, если на сервере Xray 26.9.8 или новее. Такой сервер принимает только ClientHello с ключом X25519MLKEM768, а sing-box (по крайней мере до 1.14.x) этот ключ не отправляет, поэтому подключение всегда завершается ошибкой `reality verification failed` ([SagerNet/sing-box#4520](https://github.com/SagerNet/sing-box/issues/4520)). В Clash-подписке для Reality включён `support-x25519mlkem768: true`, поэтому Mihomo подключается.
+
 ## Связка серверов
 
 1. На втором сервере (на нём тоже стоит KVK Panel) откройте «Связка серверов» и скопируйте ключ.

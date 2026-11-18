@@ -147,13 +147,15 @@ const withFmt = (f) => subUrl.value + (subUrl.value.includes('?') ? '&' : '?') +
 const hasMasque = computed(() => (d.value?.links || []).some(l => l.configType === 'xray-json'))
 const hasTuic = computed(() => (d.value?.links || []).some(l => l.protocol === 'tuic'))
 const formats = computed(() => {
-  const json = withFmt('json'), clash = withFmt('clash')
+  const json = withFmt('json'), clash = withFmt('clash'), sb = withFmt('singbox')
   return [
     { id: 'json', name: 'JSON (Xray)', url: json, add: 'happ://add/' + json, addLabel: 'В Happ',
       note: 'всё в одном файле' + (hasMasque.value ? ', включая MASQUE' : '') + ' — Happ, v2RayTun, INCY, v2rayN' },
+    { id: 'singbox', name: 'sing-box', url: sb, add: 'sing-box://import-remote-profile?url=' + enc(sb) + '#' + enc(d.value?.title || 'VPN'), addLabel: 'В sing-box',
+      note: 'готовый конфиг sing-box 1.12+' + (hasTuic.value ? ', с TUIC' : '') + ' (без XHTTP, MASQUE, AWG) — sing-box (SFA/SFI/SFM/SFW), Karing, Throne, NekoBox' },
     { id: 'clash', name: 'Clash / Mihomo', url: clash, add: 'clash://install-config?url=' + enc(clash), addLabel: 'В FlClash',
       note: (hasTuic.value || awg.value.length ? 'включая ' + [hasTuic.value && 'TUIC', awg.value.length && 'AmneziaWG'].filter(Boolean).join(' и ') + ' — ' : '') + 'FlClash, Clash Verge, Mihomo' },
-    { id: 'links', name: 'Ссылки', url: withFmt('links'), note: 'Hiddify, NekoBox, sing-box, Streisand и другие' + (hasMasque.value ? ' — без MASQUE' : '') },
+    { id: 'links', name: 'Ссылки (base64)', url: withFmt('base64'), note: 'Hiddify, v2rayNG, Streisand, Throne и другие' + (hasMasque.value ? ' — без MASQUE' : '') },
   ]
 })
 const pct = computed(() => d.value?.limit ? Math.min(100, Math.round((d.value.up + d.value.down) / d.value.limit * 100)) : 0)

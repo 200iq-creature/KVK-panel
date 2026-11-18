@@ -404,6 +404,7 @@ func (a *App) syncNodesNow() {
 			n.LastSync = now
 			n.PingMs = res.ping
 			n.Version = ni.Version
+			n.Xray = ni.Xray
 			n.CPU = ni.CPU
 			n.Clients = ni.Clients
 			if ni.Country != "" {

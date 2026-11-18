@@ -39,7 +39,7 @@ func filterFrontLinks(links []linkItem, ua, format string) []linkItem {
 	}
 	drop := ""
 	switch {
-	case format == "clash" || has("sing-box", "singbox", "hiddify", "nekobox", "nekoray", "throne", "karing", "husi", "clash", "mihomo", "stash"):
+	case format == "clash" || format == "singbox" || has("sing-box", "singbox", "sfa/", "sfi/", "sfm/", "sft/", "hiddify", "nekobox", "nekoray", "throne", "karing", "husi", "clash", "mihomo", "stash"):
 		drop = "xhttp"
 	case format == "json" || has("happ", "v2rayn", "v2raytun", "streisand", "incy", "v2box", "foxray", "xray"):
 		drop = "ws"
@@ -176,6 +176,10 @@ func (a *App) handleSubscription(w http.ResponseWriter, r *http.Request, subID s
 		switch {
 		case strings.Contains(l, "clash") || strings.Contains(l, "mihomo") || strings.Contains(l, "stash"):
 			format = "clash"
+		case strings.HasPrefix(l, "sfa/") || strings.HasPrefix(l, "sfi/") || strings.HasPrefix(l, "sfm/") || strings.HasPrefix(l, "sft/") ||
+			strings.HasPrefix(l, "sing-box"):
+			// official sing-box apps only understand their own JSON
+			format = "singbox"
 		case (strings.Contains(l, "happ") || strings.Contains(l, "v2raytun") || strings.Contains(l, "incy") || strings.Contains(l, "v2rayng")) &&
 			(sub.AutoSelect || sub.Fragment || strings.TrimSpace(sub.JSONTemplate) != "" || sub.HappRoutingRU || hasConfigType(links, "xray-json")):
 			format = "json"
@@ -185,6 +189,10 @@ func (a *App) handleSubscription(w http.ResponseWriter, r *http.Request, subID s
 	case "json":
 		h.Set("Content-Type", "application/json; charset=utf-8")
 		b, _ := json.MarshalIndent(buildJSONSub(links, &c, sub), "", "  ")
+		_, _ = w.Write(b)
+	case "singbox", "sing-box":
+		h.Set("Content-Type", "application/json; charset=utf-8")
+		b, _ := json.MarshalIndent(buildSingbox(links, &c, sub, a.realityStrict()), "", "  ")
 		_, _ = w.Write(b)
 	case "clash":
 		h.Set("Content-Type", "text/yaml; charset=utf-8")
@@ -454,7 +462,9 @@ func clashProxy(l linkItem, c *Client) M {
 			p["tls"] = true
 			p[sniKey] = ep.SNI
 			p["client-fingerprint"] = orDefault(ep.FP, "chrome")
-			p["reality-opts"] = M{"public-key": ep.PublicKey, "short-id": ep.ShortID}
+			// Xray 26.9.8+ REALITY servers only accept a ClientHello carrying an
+			// X25519MLKEM768 key share; mihomo strips it unless asked to keep it
+			p["reality-opts"] = M{"public-key": ep.PublicKey, "short-id": ep.ShortID, "support-x25519mlkem768": true}
 		case "tls":
 			p["tls"] = true
 			if ep.SNI != "" {
